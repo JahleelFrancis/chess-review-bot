@@ -15,7 +15,18 @@ async function fetchData(url) {
     }
 
     const data = await response.json();
-    console.log(data);
+    const archivesDiv = document.getElementById("archives");
+    archivesDiv.innerHTML = "";
+
+    data.archives.forEach(archive => {
+        const archiveButton = document.createElement('button');
+        archiveButton.innerText = `${archive}`;
+        archiveButton.onclick = function handleArchiveButtonClick(){
+            alert('button clicked');
+        }
+        archivesDiv.appendChild(archiveButton);
+    });
+
   } catch (error) {
     console.error("Error fetching data:", error);
   }
