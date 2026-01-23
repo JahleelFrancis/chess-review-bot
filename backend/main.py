@@ -7,4 +7,8 @@ app = FastAPI()
 def get_chesscom_archives(username: str):
     return {"archives": [f"dummy-archive-for-{username}"]}
 
+@app.get("/api/chesscom/{username}/games")
+def get_chesscom_games(username: str, archive: str):
+    return {"username": username, "archive": archive, "games": [f"dummy-game-from-{archive}-for-{username}"]}
+
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
