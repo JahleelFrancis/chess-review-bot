@@ -1,6 +1,6 @@
 // This is the button the user clicks after typing their username
 const fetchGamesButton = document.getElementById("fetchGamesButton");
-
+let currentUsername = "";
 /*
   When the user clicks "Fetch Games":
   1. Read the username from the input box
@@ -8,10 +8,14 @@ const fetchGamesButton = document.getElementById("fetchGamesButton");
   3. Call fetchData() to talk to the backend
 */
 fetchGamesButton.onclick = function handleFetchGamesClick() {
-    const username = document.getElementById("username").value;
+    currentUsername = document.getElementById("username").value.trim().toLowerCase();
+    if(!currentUsername) {
+        alert("Please enter a valid username.");
+        return;
+    }
     // This endpoint returns the list of archives for the user
     // Example: /api/chesscom/jahleel/archives
-    const url = `/api/chesscom/${username}/archives`;
+    const url = `/api/chesscom/${currentUsername}/archives`;
     fetchData(url);
 };
 
