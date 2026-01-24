@@ -9,7 +9,6 @@ const fetchGamesButton = document.getElementById("fetchGamesButton");
 */
 fetchGamesButton.onclick = function handleFetchGamesClick() {
     const username = document.getElementById("username").value;
-
     // This endpoint returns the list of archives for the user
     // Example: /api/chesscom/jahleel/archives
     const url = `/api/chesscom/${username}/archives`;
@@ -52,19 +51,16 @@ async function fetchData(url) {
   try {
     // Send a GET request to the backend
     const response = await fetch(url);
-
     // If the backend returns an error status (404, 500, etc.)
     // we manually throw an error so it goes to the catch block
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-
     // Convert the JSON response body into a JavaScript object
     const data = await response.json();
-
     // Get the <div> where we will display archive buttons
     const archivesDiv = document.getElementById("archives");
-
+    
     // Clear any previously displayed archives
     // (important when fetching a new username)
     archivesDiv.innerHTML = "";
@@ -77,17 +73,13 @@ async function fetchData(url) {
     data.archives.forEach(archive => {
         // Create a button for this archive
         const archiveButton = document.createElement('button');
-
         // Show the archive name on the button
         archiveButton.innerText = archive;
-
         /*
           When this archive button is clicked:
-          - For now, just show an alert
-          - Later, this will fetch the games for this archive
+          Call fetchArchiveGames() to get the games in this archive
         */
         archiveButton.onclick = () => fetchArchiveGames(username, archive);
-
         // Add the button to the page
         archivesDiv.appendChild(archiveButton);
     });
