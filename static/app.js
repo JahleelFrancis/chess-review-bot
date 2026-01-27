@@ -81,8 +81,8 @@ async function fetchData(url) {
         const archiveButton = document.createElement('button');
         // Show the archive name on the button
         const archiveSegments = archive.split('/');
-        const archiveMonth = archiveSegments[-1];
-        const archiveYear = archiveSegments[-2];
+        const archiveMonth = archiveSegments.at(-1);
+        const archiveYear = archiveSegments.at(-2);
         const archiveParam = `${archiveYear}/${archiveMonth}`;
         
         archiveButton.innerText = `Archive: ${archiveMonth} / ${archiveYear}`;

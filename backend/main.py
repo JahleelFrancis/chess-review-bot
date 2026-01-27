@@ -8,7 +8,7 @@ app = FastAPI()
 errorDictionary = {
     400: "Bad request. Please check the username.",
     403: "Access forbidden. The user may have a private profile.",
-    404: "User not found",
+    404: "No games found for that archive or user does not exist.",
     429: "Rate limit exceeded. Please try again later.",
     500: "Chess.com server error. Please try again later.",
     502: "Bad gateway. Please try again later.",
@@ -49,13 +49,11 @@ async def get_chesscom_games(username: str, archive: str):
         raise HTTPException(status_code=400, detail="Invalid archive format. Use 'YYYY/MM'.")
     
     year, month = archive_parts
-    try:
-        year = int(year)
-        month = int(month)
-        if month < 1 or month > 12:
-            raise ValueError
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid archive format. Use 'YYYY/MM' with valid month.")
+    if not (year.isdigit() and len(year) == 4):
+        raise HTTPException(400, "Invalid year. Use YYYY.")
+    
+    if not (month.isdigit() and len(month) == 2 and 1 <= int(month) <= 12):
+        raise HTTPException(400, "Invalid month. Use MM (01-12).")
     
     chesscom_url = f"https://api.chess.com/pub/player/{username}/games/{year}/{month}"
 
