@@ -32,8 +32,15 @@ async function fetchArchiveGames(username, archive) {
         gamesDiv.innerHTML = "";
 
         data.games.forEach(game => {
+          let outcome = "Draw";
+          if (game.white.result === "win") {
+              outcome = "White Wins";
+          } else if (game.black.result === "win") {
+              outcome = "Black Wins";
+          }
+
           const gameButton = document.createElement('button');
-          gameButton.innerText = game;
+          gameButton.innerText = `${game.white.username} (W) vs ${game.black.username} (B) - ${outcome}`;
         
           gameButton.onclick = function handleGameButtonClick() {
               alert(`Game button clicked: ${game}`);
