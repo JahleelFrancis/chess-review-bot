@@ -43,7 +43,19 @@ async function fetchArchiveGames(username, archive) {
           gameButton.innerText = `${game.white.username} (W) vs ${game.black.username} (B) - ${outcome}`;
         
           gameButton.onclick = function handleGameButtonClick() {
-              alert(`Game button clicked: ${game}`);
+              const analysisDiv = document.getElementById("analysis");
+              analysisDiv.innerHTML = `
+                  <h3>Game Analysis</h3>
+                  <p><strong>White:</strong> ${game.white.username} (${game.white.rating})</p>
+                  <p><strong>Black:</strong> ${game.black.username} (${game.black.rating})</p>
+                  <p><strong>Result:</strong> ${outcome}</p>
+                  <p><strong>Time Control:</strong> ${game.time_control}</p>
+                  <p><strong>Date:</strong> ${new Date(game.end_time * 1000).toLocaleDateString()}</p>
+                  <p><a href="${game.url}" target="_blank">View on Chess.com</a></p>
+                  <h3>PGN:</h1>
+                  <pre id="pgnBox"></pre>
+                  `;
+                  document.getElementById("pgnBox").innerText = game.pgn;
           }
           gamesDiv.appendChild(gameButton);
         });
