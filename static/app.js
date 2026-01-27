@@ -21,6 +21,7 @@ fetchGamesButton.onclick = function handleFetchGamesClick() {
 
 async function fetchArchiveGames(username, archive) {
     const archiveUrl = `/api/chesscom/${username}/games?archive=${archive}`;
+
     try {
         const response = await fetch(archiveUrl);
         if (!response.ok) {
@@ -64,6 +65,7 @@ async function fetchData(url) {
     const data = await response.json();
     // Get the <div> where we will display archive buttons
     const archivesDiv = document.getElementById("archives");
+
     
     // Clear any previously displayed archives
     // (important when fetching a new username)
@@ -78,12 +80,18 @@ async function fetchData(url) {
         // Create a button for this archive
         const archiveButton = document.createElement('button');
         // Show the archive name on the button
-        archiveButton.innerText = archive;
+        const archiveSegments = archive.split('/');
+        const archiveMonth = archiveSegments[-1];
+        const archiveYear = archiveSegments[-2];
+        const archiveParam = `${archiveYear}/${archiveMonth}`;
+        
+        archiveButton.innerText = `Archive: ${archiveMonth} / ${archiveYear}`;
+
         /*
           When this archive button is clicked:
           Call fetchArchiveGames() to get the games in this archive
         */
-        archiveButton.onclick = () => fetchArchiveGames(username, archive);
+        archiveButton.onclick = () => fetchArchiveGames(currentUsername, archiveParam);
         // Add the button to the page
         archivesDiv.appendChild(archiveButton);
     });
