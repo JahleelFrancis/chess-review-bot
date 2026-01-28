@@ -52,10 +52,11 @@ async function fetchArchiveGames(username, archive) {
                   <p><strong>Time Control:</strong> ${game.time_control}</p>
                   <p><strong>Date:</strong> ${new Date(game.end_time * 1000).toLocaleDateString()}</p>
                   <p><a href="${game.url}" target="_blank">View on Chess.com</a></p>
-                  <h3>PGN:</h1>
+                  <h3>PGN:</h3>
                   <pre id="pgnBox"></pre>
                   `;
                   document.getElementById("pgnBox").innerText = game.pgn;
+                  postData({ pgn: game.pgn });
           }
           gamesDiv.appendChild(gameButton);
         });
@@ -119,4 +120,24 @@ async function fetchData(url) {
     // Any network or parsing errors end up here
     console.error("Error fetching data:", error);
   }
+
 }
+
+async function postData(data = {}) {
+    const postURL = "/api/analyze";
+    try{
+      const response = await fetch(postURL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(data)
+      });
+      if(response.ok) {
+        const result = await response.json();
+        console.log("Analysis result:", result);
+      }
+    } catch (error) {
+      console.error("Error posting data:", error);
+    }
+  }

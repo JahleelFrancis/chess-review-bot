@@ -1,9 +1,14 @@
+from symtable import Class
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi import HTTPException
 import httpx
+from pydantic import BaseModel
 
 app = FastAPI()
+
+class PGNData(BaseModel):
+    pgn: str
 
 errorDictionary = {
     400: "Bad request. Please check the username.",
@@ -70,6 +75,21 @@ async def get_chesscom_games(username: str, archive: str):
             status_code = 502
         error_message = errorDictionary.get(status_code, "An unexpected error occurred.")
         raise HTTPException(status_code=status_code, detail=error_message)
-    # return {"username": username, "archive": archive, "games": [f"dummy-game-from-{archive}-for-{username}"]}
+
+@app.post("/api/analyze")
+async def analyze_game(response: PGNData):
+    if not response.pgn or response.pgn.strip() == "":
+        raise HTTPException(status_code=400, detail="PGN data cannot be empty.")
+    
+    # Placeholder for analysis logic
+    analysis_result = {
+        "summary": "Ready to analyze",
+        "moves": [],
+        "players": {},
+        "results": {},
+        "details": {}
+    }
+    
+    return analysis_result
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
