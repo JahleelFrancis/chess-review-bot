@@ -5,6 +5,7 @@ from fastapi import HTTPException
 import httpx
 from pydantic import BaseModel
 
+
 app = FastAPI()
 
 class PGNData(BaseModel):

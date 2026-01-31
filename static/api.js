@@ -1,4 +1,23 @@
+/*
+  api.js
+  ------
+  Backend/API + DOM rendering helpers.
+
+  Because we're not using a bundler, these functions are attached to window:
+  - window.fetchData(url): fetch archives for a username and render archive buttons
+  - window.fetchArchiveGames(username, archive): fetch games in a specific month and render game buttons
+  - window.postData({pgn}): POST to /api/analyze (currently placeholder response)
+
+  UI Flow today:
+  - fetchData() renders monthly archive buttons
+  - clicking an archive calls fetchArchiveGames()
+  - clicking a game renders game details + PGN
+    (and currently triggers postData() automatically — later this will move behind an explicit Analyze button)
+*/
+
 window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
+    // Backend endpoint for a month's games:
+    // /api/chesscom/{username}/games?archive=YYYY/MM
     const archiveUrl = `/api/chesscom/${username}/games?archive=${archive}`;
 
     try {
@@ -6,11 +25,14 @@ window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
+
         const data = await response.json();
         const gamesDiv = document.getElementById("games");
         gamesDiv.innerHTML = "";
 
+        // Render each game as a button the user can click to inspect details/PGN
         data.games.forEach(game => {
+          // Determine outcome label based on Chess.com result fields
           let outcome = "Draw";
           if (game.white.result === "win") {
               outcome = "White Wins";
@@ -20,7 +42,13 @@ window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
 
           const gameButton = document.createElement('button');
           gameButton.innerText = `${game.white.username} (W) vs ${game.black.username} (B) - ${outcome}`;
-        
+
+          /*
+            Clicking a game:
+            - Populates the analysis panel with game metadata
+            - Displays PGN in a <pre>
+            - Sends PGN to /api/analyze (temporary wiring; later this will be an explicit "Analyze" button)
+          */
           gameButton.onclick = function handleGameButtonClick() {
               const analysisDiv = document.getElementById("analysis");
               analysisDiv.innerHTML = `
@@ -34,74 +62,83 @@ window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
                   <h3>PGN:</h3>
                   <pre id="pgnBox"></pre>
                   `;
-                  document.getElementById("pgnBox").innerText = game.pgn;
-                  window.postData({ pgn: game.pgn });
+
+              // Show raw PGN text (later: parse into moves/FEN for the analysis view)
+              document.getElementById("pgnBox").innerText = game.pgn;
+
+              // Backend analyze endpoint (currently returns placeholder JSON)
+              window.postData({ pgn: game.pgn });
           }
+
           gamesDiv.appendChild(gameButton);
         });
+
     } catch (error) {
         console.error("Error fetching archive games:", error);
     }
 }
 
 /*
-  fetchData is a generic async function that:
-  - Sends an HTTP request to the backend
-  - Waits for the response
-  - Converts the response into JSON
-  - Updates the DOM based on the returned data
+  fetchData(url)
+  --------------
+  Generic GET helper used for fetching and rendering archive months.
+
+  Current usage:
+  - Called from app.js after the user submits a username
+  - Expects a response like: { archives: ["https://.../YYYY/MM", ...] }
+  - Renders each archive month as a clickable button
 */
 window.fetchData = async function fetchData(url) {
   try {
-    // Send a GET request to the backend
     const response = await fetch(url);
-    // If the backend returns an error status (404, 500, etc.)
-    // we manually throw an error so it goes to the catch block
+
+    // If backend returns 404/500/etc, throw so it lands in catch()
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    // Convert the JSON response body into a JavaScript object
+
     const data = await response.json();
-    // Get the <div> where we will display archive buttons
+
+    // <div> container where we render archive buttons
     const archivesDiv = document.getElementById("archives");
 
-    
-    // Clear any previously displayed archives
-    // (important when fetching a new username)
+    // Clear any previously displayed archives (important when fetching a new username)
     archivesDiv.innerHTML = "";
 
-    /*
-      Loop through each archive returned by the backend.
-      data.archives is an array like:
-      ["dummy-archive-for-jahleel"]
-    */
+    // Create one button per archive month
     data.archives.forEach(archive => {
-        // Create a button for this archive
         const archiveButton = document.createElement('button');
-        // Show the archive name on the button
+
+        // Convert archive URL into "YYYY/MM" for the query param,
+        // and display it in a more readable "Archive: MM / YYYY" format
         const archiveSegments = archive.split('/');
         const archiveMonth = archiveSegments.at(-1);
         const archiveYear = archiveSegments.at(-2);
         const archiveParam = `${archiveYear}/${archiveMonth}`;
-        
+
         archiveButton.innerText = `Archive: ${archiveMonth} / ${archiveYear}`;
 
-        /*
-          When this archive button is clicked:
-          Call fetchArchiveGames() to get the games in this archive
-        */
+        // Clicking an archive fetches the games in that month and renders game buttons
         archiveButton.onclick = () => window.fetchArchiveGames(window.currentUsername, archiveParam);
-        // Add the button to the page
+
         archivesDiv.appendChild(archiveButton);
     });
 
   } catch (error) {
-    // Any network or parsing errors end up here
     console.error("Error fetching data:", error);
   }
-
 }
 
+/*
+  postData(data)
+  --------------
+  POST helper for the analysis endpoint.
+
+  Current usage:
+  - Sends { pgn: "<PGN text>" } to /api/analyze
+  - Backend currently returns a placeholder response
+  - Later: backend will return moves, FENs, and Stockfish eval/best lines
+*/
 window.postData = async function postData(data = {}) {
   const postURL = "/api/analyze";
 
@@ -112,23 +149,24 @@ window.postData = async function postData(data = {}) {
       body: JSON.stringify(data)
     });
 
+    // Try JSON first; fall back to text if needed
     let payload;
     try {
-      payload = await response.json(); // Try to parse as JSON
+      payload = await response.json();
     } catch {
-      payload = await response.text(); // Fallback to plain text
+      payload = await response.text();
     }
 
     if (response.ok) {
-      console.log("Analysis response:", payload); // Log the response for debugging
+      console.log("Analysis response:", payload);
       return payload;
     } else {
-      console.error("Error response:", response.status, payload); // Log error details
-      throw new Error(`HTTP error! status: ${response.status}`); // Throw error to be caught below
+      console.error("Error response:", response.status, payload);
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
 
   } catch (error) {
-    console.error("Error posting data:", error); // Log any network or other errors
+    console.error("Error posting data:", error);
     return null;
   }
 }
