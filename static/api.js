@@ -12,8 +12,11 @@
   - fetchData() renders monthly archive buttons
   - clicking an archive calls fetchArchiveGames()
   - clicking a game renders game details + PGN
-    (and currently triggers postData() automatically — later this will move behind an explicit Analyze button)
+  - clicking "Analyze Game" sends PGN to /api/analyze via postData()
 */
+async function yieldNextFrame() {
+    return new Promise(resolve => requestAnimationFrame(() => resolve()));
+}
 
 window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
     // Backend endpoint for a month's games:
@@ -61,13 +64,38 @@ window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
                   <p><a href="${game.url}" target="_blank">View on Chess.com</a></p>
                   <h3>PGN:</h3>
                   <pre id="pgnBox"></pre>
+                  <button id="analyzeButton">Analyze Game</button>
                   `;
 
               // Show raw PGN text (later: parse into moves/FEN for the analysis view)
               document.getElementById("pgnBox").innerText = game.pgn;
 
-              // Backend analyze endpoint (currently returns placeholder JSON)
-              window.postData({ pgn: game.pgn });
+              window.selectedGamePGN = game.pgn; // Store globally for potential later use
+              console.log("Selected game PGN:", window.selectedGamePGN);
+
+
+              const analyzeButton = document.getElementById("analyzeButton");
+              analyzeButton.onclick = async function() {
+                  analyzeButton.innerText = "Analyzing...";
+                  analyzeButton.disabled = true;
+                  await yieldNextFrame(); // Allow UI to update before analysis starts
+                  try{
+                      await analyzeGame();
+                  }catch(error){
+                      console.error("Error during analysis:", error);
+                      alert("An error occurred during analysis. Please try again.");
+                      
+                  }finally{
+                    analyzeButton.disabled = false;
+                    analyzeButton.innerText = "Analyze Game";
+                  }
+
+              async function analyzeGame() {
+                      const analysisResult = await window.postData({ pgn: window.selectedGamePGN });
+                      console.log("Analysis result:", analysisResult);
+                  }
+
+              }
           }
 
           gamesDiv.appendChild(gameButton);
