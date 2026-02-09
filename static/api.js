@@ -18,6 +18,12 @@ async function yieldNextFrame() {
     return new Promise(resolve => requestAnimationFrame(() => resolve()));
 }
 
+async function analyzeGame() {
+    const analysisResult = await window.postData({ pgn: window.selectedGamePGN });
+    console.log("Analysis result:", analysisResult);
+    return analysisResult;
+}
+
 window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
     // Backend endpoint for a month's games:
     // /api/chesscom/{username}/games?archive=YYYY/MM
@@ -78,9 +84,20 @@ window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
               analyzeButton.onclick = async function() {
                   analyzeButton.innerText = "Analyzing...";
                   analyzeButton.disabled = true;
+                  let result;
                   await yieldNextFrame(); // Allow UI to update before analysis starts
                   try{
-                      await analyzeGame();
+                      result = await analyzeGame();
+                      if(result == null){
+                          alert("Analysis failed. Please try again."); // Handle case where postData returns null due to an error
+                          return;
+                      }
+                      window.analysisResult = result; // Store analysis result globally for potential later use
+                      console.log(result.moves.length);
+                      console.log(result.fens.length);
+                      console.log(result.fens[0]);
+                      console.log(result.fens[result.fens.length - 1]);
+
                   }catch(error){
                       console.error("Error during analysis:", error);
                       alert("An error occurred during analysis. Please try again.");
@@ -88,11 +105,6 @@ window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
                   }finally{
                     analyzeButton.disabled = false;
                     analyzeButton.innerText = "Analyze Game";
-                  }
-
-              async function analyzeGame() {
-                      const analysisResult = await window.postData({ pgn: window.selectedGamePGN });
-                      console.log("Analysis result:", analysisResult);
                   }
 
               }

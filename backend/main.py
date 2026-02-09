@@ -1,10 +1,11 @@
-from symtable import Class
+import io
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi import HTTPException
 import httpx
 from pydantic import BaseModel
-
+import chess
+import chess.pgn
 
 app = FastAPI()
 
@@ -82,13 +83,25 @@ async def analyze_game(response: PGNData):
     if not response.pgn or response.pgn.strip() == "":
         raise HTTPException(status_code=400, detail="PGN data cannot be empty.")
     
-    # Placeholder for analysis logic
+    game = chess.pgn.read_game(io.StringIO(response.pgn))
+    if game is None:
+        raise HTTPException(status_code=400, detail="Invalid PGN format.")
+    
+    board = game.board()
+    moves = list(game.mainline_moves())
+    moves_san = []
+    fens = [board.fen()]
+    move_count = 0
+    
+    for move in moves:
+        moves_san.append(board.san(move))
+        board.push(move)
+        fens.append(board.fen())
+        move_count += 1
+
     analysis_result = {
-        "summary": "Ready to analyze",
-        "moves": [],
-        "players": {},
-        "results": {},
-        "details": {}
+        "fens": fens,
+        "moves": moves_san
     }
     
     return analysis_result
