@@ -3,9 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <title>Chess Review Bot</title>
+    <link rel="stylesheet" href="styles.css">
   </head>
   <body>
-    <h1>Chess Review Bot</h1>
+    <h1>title</h1>
     <p>If you can see this, FastAPI is serving your frontend.</p>
     <p>This web application allows you to review chess games.</p>
     
@@ -15,13 +16,21 @@
       <button type="button" id="fetchGamesButton">Fetch Games</button>
     </form>
 
+    <link rel="stylesheet" href="/vendor/chessboard-1.0.0.min.css">
+    <link rel="stylesheet" href="/styles.css">
+
     <div id="archives"></div>
     <div id="games"></div>
     <div id="analysis"></div>
     <div id="board"></div>
+    <div id="analysisControls"></div>
+  
+
+    <script src="vendor/jquery.min.js"></script>
+    <script src="vendor/chessboard-1.0.0.js"></script>
 
     <script src="api.js"></script>
     <script src="app.js"></script>
-    <!-- <script src="ui.js"></script> -->
+    <script src="ui.js"></script>
   </body>
 </html>

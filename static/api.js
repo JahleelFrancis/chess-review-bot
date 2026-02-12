@@ -93,6 +93,14 @@ window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
                           return;
                       }
                       window.analysisResult = result; // Store analysis result globally for potential later use
+
+                      if (typeof window.initAnalysisUI === "function") {
+                        window.initAnalysisUI(result);
+                      } else {
+                        console.warn("window.initAnalysisUI is not defined. Skipping UI initialization.");
+                      }
+
+
                       console.log(result.moves.length);
                       console.log(result.fens.length);
                       console.log(result.fens[0]);
