@@ -1,4 +1,88 @@
-#board {
-  width: 400px;
+/* --- Analysis layout --- */
+#analysisLayout {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
   margin-top: 12px;
+}
+
+#boardColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Board */
+#board {
+  width: 420px; /* tweak this if you want */
+}
+
+/* Controls bar */
+#analysisControls {
+  display: flex;
+  gap: 8px;
+}
+
+#analysisControls button {
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  background: #f7f7f7;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+#analysisControls button:hover {
+  background: #eee;
+}
+
+/* --- Move list (right panel) --- */
+#moveList {
+  flex: 1;
+  max-width: 520px;
+  max-height: 520px;
+  overflow-y: auto;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+}
+
+/* Table hugs content so columns don't fly apart */
+.move-table {
+  width: max-content; /* KEY: keeps white/black close together */
+  border-collapse: collapse;
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+}
+
+.move-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid #eee;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.move-num {
+  width: 36px;
+  text-align: right;
+  color: #666;
+  padding-right: 8px;
+}
+
+.move-cell {
+  cursor: pointer;
+  border-radius: 6px;
+  user-select: none;
+  min-width: 72px; /* keeps it tight but readable */
+  text-align: left;
+}
+
+.move-cell:hover {
+  background: #f3f3f3;
+}
+
+.move-cell.active-move {
+  background: #e7f1ff;
+  font-weight: 800;
+  color: #0b57d0;
+  outline: 2px solid #0b57d0;
 }

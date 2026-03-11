@@ -3,35 +3,44 @@
   <head>
     <meta charset="utf-8" />
     <title>Chess Review Bot</title>
-    <link rel="stylesheet" href="styles.css">
+
+    <!-- Vendor + app styles -->
+    <link rel="stylesheet" href="/vendor/chessboard-1.0.0.min.css" />
+    <link rel="stylesheet" href="/styles.css" />
   </head>
+
   <body>
     <h1>title</h1>
     <p>If you can see this, FastAPI is serving your frontend.</p>
     <p>This web application allows you to review chess games.</p>
-    
+
     <form id="usernameForm">
       <label for="username">Enter your Chess.com username:</label>
       <input type="text" id="username" name="username" required />
       <button type="button" id="fetchGamesButton">Fetch Games</button>
     </form>
 
-    <link rel="stylesheet" href="/vendor/chessboard-1.0.0.min.css">
-    <link rel="stylesheet" href="/styles.css">
-
     <div id="archives"></div>
     <div id="games"></div>
     <div id="analysis"></div>
-    <div id="board"></div>
-    <div id="analysisControls"></div>
-    <div id="moveList"></div>
-  
 
-    <script src="vendor/jquery.min.js"></script>
-    <script src="vendor/chessboard-1.0.0.js"></script>
+    <!-- Analysis view layout -->
+    <div id="analysisLayout">
+      <div id="boardColumn">
+        <div id="board"></div>
+        <div id="analysisControls"></div>
+      </div>
 
-    <script src="api.js"></script>
-    <script src="app.js"></script>
-    <script src="ui.js"></script>
+      <div id="moveList"></div>
+    </div>
+
+    <!-- Vendor scripts -->
+    <script src="/vendor/jquery.min.js"></script>
+    <script src="/vendor/chessboard-1.0.0.js"></script>
+
+    <!-- App scripts -->
+    <script src="/ui.js"></script>
+    <script src="/api.js"></script>
+    <script src="/app.js"></script>
   </body>
 </html>

@@ -1,58 +1,96 @@
+function updateActiveMoveHighlight() {
+  const moveListDiv = document.getElementById("moveList");
+  if (!moveListDiv) return;
+
+  // remove existing highlight
+  moveListDiv
+    .querySelectorAll(".move-cell.active-move")
+    .forEach((el) => el.classList.remove("active-move"));
+
+  if (!window.analysisResult || window.currentMoveIndex <= 0) return;
+
+  // fen index -> ply index
+  const ply = window.currentMoveIndex - 1;
+
+  const cell = moveListDiv.querySelector(`.move-cell[data-ply="${ply}"]`);
+  if (!cell) return;
+
+  cell.classList.add("active-move");
+  cell.scrollIntoView({ block: "nearest" });
+}
+
 window.initAnalysisUI = function initAnalysisUI(analysisResult) {
-  // Expose a globally callable initializer so other scripts can start/update the analysis UI.
-  // This is necessary because the app calls this function after receiving analysis data.
+  // Basic guard so we don't crash if something unexpected is passed in
+  if (
+    !analysisResult ||
+    !Array.isArray(analysisResult.fens) ||
+    analysisResult.fens.length === 0
+  ) {
+    console.error("initAnalysisUI: invalid analysisResult", analysisResult);
+    return;
+  }
 
   // Check whether the board and controls were already created on a previous call.
   // This prevents rebuilding the same DOM/UI objects every time new analysis arrives.
   if (!window.boardApi) {
     // Create and store one shared chessboard instance on window for cross-handler access.
     // Storing it globally is necessary because button handlers need to update board state later.
-    window.boardApi = Chessboard('board', {
-      position: 'start',
-      pieceTheme: '/img/chesspieces/wikipedia/{piece}.png',
-      draggable: false
+    window.boardApi = Chessboard("board", {
+      position: "start",
+      pieceTheme: "/img/chesspieces/wikipedia/{piece}.png",
+      draggable: false,
     });
 
-    // Get the container where replay controls (previous/next) will be placed.
-    // Required so we can inject navigation buttons into the existing page structure.
+    // Get the container where replay controls (previous/next/reset) will be placed.
     const controls = document.getElementById("analysisControls");
 
     // Remove any existing control markup inside that container.
-    // Necessary to avoid duplicate buttons if container had old content.
     controls.innerHTML = "";
 
     const prevBtn = document.createElement("button");
-
     prevBtn.innerText = "Previous Move";
 
-    const nextBtn = document.createElement("button");
+    // Reset button (requested)
+    const resetBtn = document.createElement("button");
+    resetBtn.innerText = "Reset";
 
+    const nextBtn = document.createElement("button");
     nextBtn.innerText = "Next Move";
 
-    // Attach the previous button to the controls container in the DOM.
+    // Add buttons to the controls container
     controls.appendChild(prevBtn);
-
-    // Attach the next button to the controls container in the DOM.
+    controls.appendChild(resetBtn);
     controls.appendChild(nextBtn);
 
     // Register click behavior for stepping to the previous FEN position.
     prevBtn.onclick = function () {
       if (window.currentMoveIndex > 0) {
         window.currentMoveIndex--;
-
-        // Re-render the board using the updated FEN at the new index.
-        window.boardApi.position(window.analysisResult.fens[window.currentMoveIndex], true);
+        window.boardApi.position(
+          window.analysisResult.fens[window.currentMoveIndex],
+          true
+        );
       }
+      updateActiveMoveHighlight();
+    };
+
+    // Reset to start position
+    resetBtn.onclick = function () {
+      window.currentMoveIndex = 0;
+      window.boardApi.position(window.analysisResult.fens[0], false);
+      updateActiveMoveHighlight();
     };
 
     // Register click behavior for stepping to the next FEN position.
     nextBtn.onclick = function () {
       if (window.currentMoveIndex < window.maxIndex) {
         window.currentMoveIndex++;
-
-        // Re-render board using FEN at the new index.
-        window.boardApi.position(window.analysisResult.fens[window.currentMoveIndex], true);
+        window.boardApi.position(
+          window.analysisResult.fens[window.currentMoveIndex],
+          true
+        );
       }
+      updateActiveMoveHighlight();
     };
   }
 
@@ -65,22 +103,66 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
   // Compute and store the last valid replay index from FEN count.
   window.maxIndex = analysisResult.fens.length - 1;
 
-  // Immediately render the first analyzed position on load/update.
-  // Necessary so users see board state without pressing a button first.
-  window.boardApi.position(analysisResult.fens[0], true);
+  // Immediately render the first analyzed position on load/update (no animation).
+  window.boardApi.position(analysisResult.fens[0], false);
 
-  const moveListDiv = document.getElementById("moveList");  
+  // Render move list as a table (move number | White | Black)
+  const moveListDiv = document.getElementById("moveList");
+  if (!moveListDiv) return;
+
   moveListDiv.innerHTML = ""; // Clear any existing move list content
-  
-  const moveList = document.createElement("ol"); // Create an ordered list for moves
-  analysisResult.moves.forEach((move, index) => {
-    const moveItem = document.createElement("li"); // Create a list item for each move
-    moveItem.innerText = move; // Set the text to the move notation
-    moveItem.onclick = function() {
-      window.currentMoveIndex = index + 1; // Set current index to the move's corresponding FEN (index + 1 because FENs are offset by 1 from moves)
-      window.boardApi.position(analysisResult.fens[window.currentMoveIndex], true); // Update the board to the selected move's position
-    };
-    moveList.appendChild(moveItem); // Add the move to the list
-  });
-  moveListDiv.appendChild(moveList); // Add the complete move list to the page
+
+  const table = document.createElement("table");
+  table.className = "move-table";
+
+  const moves = analysisResult.moves || [];
+
+  for (let ply = 0; ply < moves.length; ply += 2) {
+    const moveNumber = ply / 2 + 1;
+    const whiteMove = moves[ply];
+    const blackMove = moves[ply + 1];
+
+    const tr = document.createElement("tr");
+
+    const tdNum = document.createElement("td");
+    tdNum.className = "move-num";
+    tdNum.innerText = moveNumber + ".";
+    tr.appendChild(tdNum);
+
+    const tdWhite = document.createElement("td");
+    tdWhite.className = "move-cell";
+    tdWhite.innerText = whiteMove ?? "";
+    tdWhite.dataset.ply = String(ply);
+    tr.appendChild(tdWhite);
+
+    const tdBlack = document.createElement("td");
+    tdBlack.className = "move-cell";
+    tdBlack.innerText = blackMove ?? "";
+    if (blackMove != null) tdBlack.dataset.ply = String(ply + 1);
+    tr.appendChild(tdBlack);
+
+    table.appendChild(tr);
+  }
+
+  moveListDiv.appendChild(table);
+
+  // One click handler for the whole table (event delegation)
+  moveListDiv.onclick = function (e) {
+    const cell = e.target.closest(".move-cell");
+    if (!cell) return;
+
+    const plyStr = cell.dataset.ply;
+    if (!plyStr) return; // clicked blank black cell at end of game
+
+    const ply = Number(plyStr);
+    if (!Number.isFinite(ply)) return;
+
+    // ply 0 => fens[1], ply 1 => fens[2], etc.
+    window.currentMoveIndex = ply + 1;
+    window.boardApi.position(analysisResult.fens[window.currentMoveIndex], true);
+    updateActiveMoveHighlight();
+  };
+
+  // At start position, nothing should be highlighted
+  updateActiveMoveHighlight();
 };
