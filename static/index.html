@@ -22,7 +22,6 @@
 
     <div id="archives"></div>
     <div id="games"></div>
-    <div id="analysis"></div>
 
     <!-- Analysis view layout -->
     <div id="analysisLayout">
@@ -31,7 +30,24 @@
         <div id="analysisControls"></div>
       </div>
 
-      <div id="moveList"></div>
+      <!-- Right panel: tabs -->
+      <div id="rightPanel">
+        <div id="tabBar">
+          <button id="tabMoves" class="tab-button" type="button" disabled>Moves</button>
+          <button id="tabInfo" class="tab-button active" type="button">Info</button>
+        </div>
+
+        <div id="tabPanels">
+          <div id="movesPanel" class="tab-panel active">
+            <div id="moveList"></div>
+          </div>
+
+          <div id="infoPanel" class="tab-panel">
+            <!-- api.js writes into here (game info + PGN + Analyze button) -->
+            <div id="analysis"></div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Vendor scripts -->

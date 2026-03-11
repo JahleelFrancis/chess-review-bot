@@ -1,3 +1,42 @@
+function setActiveTab(tabName) {
+  const tabMoves = document.getElementById("tabMoves");
+  const tabInfo = document.getElementById("tabInfo");
+  const movesPanel = document.getElementById("movesPanel");
+  const infoPanel = document.getElementById("infoPanel");
+
+  if (!tabMoves || !tabInfo || !movesPanel || !infoPanel) return;
+
+  if (tabName === "info") {
+    tabMoves.classList.remove("active");
+    tabInfo.classList.add("active");
+    movesPanel.classList.remove("active");
+    infoPanel.classList.add("active");
+  } else {
+    // default to moves
+    tabInfo.classList.remove("active");
+    tabMoves.classList.add("active");
+    infoPanel.classList.remove("active");
+    movesPanel.classList.add("active");
+  }
+}
+
+function ensureTabsInitialized() {
+  if (window.__tabsInitialized) return;
+
+  const tabMoves = document.getElementById("tabMoves");
+  const tabInfo = document.getElementById("tabInfo");
+
+  if (!tabMoves || !tabInfo) return;
+
+  tabMoves.onclick = () => setActiveTab("moves");
+  tabInfo.onclick = () => setActiveTab("info");
+
+  // default view: Moves (so you aren’t bombarded with PGN/info)
+  setActiveTab("moves");
+
+  window.__tabsInitialized = true;
+}
+
 function updateActiveMoveHighlight() {
   const moveListDiv = document.getElementById("moveList");
   if (!moveListDiv) return;
@@ -19,7 +58,18 @@ function updateActiveMoveHighlight() {
   cell.scrollIntoView({ block: "nearest" });
 }
 
+// Called from api.js once we have analysis data ready to go
 window.initAnalysisUI = function initAnalysisUI(analysisResult) {
+  ensureTabsInitialized();
+  const tabMoves = document.getElementById("tabMoves");
+  if (tabMoves) tabMoves.disabled = false; // enable tabs once analysis is ready
+  
+  const layout = document.getElementById("analysisLayout");
+  if (layout) layout.style.display = "flex"; // show the layout once we have data to display
+
+  // When analysis loads, show Moves tab by default
+  setActiveTab("moves");
+
   // Basic guard so we don't crash if something unexpected is passed in
   if (
     !analysisResult ||
@@ -30,39 +80,35 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
     return;
   }
 
-  // Check whether the board and controls were already created on a previous call.
-  // This prevents rebuilding the same DOM/UI objects every time new analysis arrives.
+  // Create board + controls once
   if (!window.boardApi) {
-    // Create and store one shared chessboard instance on window for cross-handler access.
-    // Storing it globally is necessary because button handlers need to update board state later.
     window.boardApi = Chessboard("board", {
       position: "start",
       pieceTheme: "/img/chesspieces/wikipedia/{piece}.png",
       draggable: false,
     });
 
-    // Get the container where replay controls (previous/next/reset) will be placed.
     const controls = document.getElementById("analysisControls");
-
-    // Remove any existing control markup inside that container.
     controls.innerHTML = "";
 
     const prevBtn = document.createElement("button");
     prevBtn.innerText = "Previous Move";
 
-    // Reset button (requested)
     const resetBtn = document.createElement("button");
     resetBtn.innerText = "Reset";
 
     const nextBtn = document.createElement("button");
     nextBtn.innerText = "Next Move";
 
-    // Add buttons to the controls container
+    const analyzeBtn = document.createElement("button");
+    analyzeBtn.innerText = "Analyze";
+    analyzeBtn.disabled = true; // enabled once a game is loaded
+
     controls.appendChild(prevBtn);
     controls.appendChild(resetBtn);
     controls.appendChild(nextBtn);
+    controls.appendChild(analyzeBtn);
 
-    // Register click behavior for stepping to the previous FEN position.
     prevBtn.onclick = function () {
       if (window.currentMoveIndex > 0) {
         window.currentMoveIndex--;
@@ -74,14 +120,12 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
       updateActiveMoveHighlight();
     };
 
-    // Reset to start position
     resetBtn.onclick = function () {
       window.currentMoveIndex = 0;
       window.boardApi.position(window.analysisResult.fens[0], false);
       updateActiveMoveHighlight();
     };
 
-    // Register click behavior for stepping to the next FEN position.
     nextBtn.onclick = function () {
       if (window.currentMoveIndex < window.maxIndex) {
         window.currentMoveIndex++;
@@ -92,25 +136,25 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
       }
       updateActiveMoveHighlight();
     };
+
+    analyzeBtn.onclick = function () {
+    alert("Stockfish analysis coming soon 🙂");
+    };
   }
 
-  // Store the latest analysis payload globally for button handlers to access.
+  // Store analysis for other handlers
   window.analysisResult = analysisResult;
-
-  // Reset replay to the beginning whenever new analysis is loaded.
   window.currentMoveIndex = 0;
-
-  // Compute and store the last valid replay index from FEN count.
   window.maxIndex = analysisResult.fens.length - 1;
 
-  // Immediately render the first analyzed position on load/update (no animation).
+  // Render start position (no animation)
   window.boardApi.position(analysisResult.fens[0], false);
 
-  // Render move list as a table (move number | White | Black)
+  // Build move table (move number | white | black)
   const moveListDiv = document.getElementById("moveList");
   if (!moveListDiv) return;
 
-  moveListDiv.innerHTML = ""; // Clear any existing move list content
+  moveListDiv.innerHTML = "";
 
   const table = document.createElement("table");
   table.className = "move-table";
@@ -146,23 +190,25 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
 
   moveListDiv.appendChild(table);
 
-  // One click handler for the whole table (event delegation)
+  // Click-to-jump (event delegation)
   moveListDiv.onclick = function (e) {
     const cell = e.target.closest(".move-cell");
     if (!cell) return;
 
     const plyStr = cell.dataset.ply;
-    if (!plyStr) return; // clicked blank black cell at end of game
+    if (!plyStr) return;
 
     const ply = Number(plyStr);
     if (!Number.isFinite(ply)) return;
 
-    // ply 0 => fens[1], ply 1 => fens[2], etc.
+    // ply 0 => fens[1]
     window.currentMoveIndex = ply + 1;
     window.boardApi.position(analysisResult.fens[window.currentMoveIndex], true);
     updateActiveMoveHighlight();
   };
 
-  // At start position, nothing should be highlighted
   updateActiveMoveHighlight();
 };
+
+// Optional: allow other files to switch tabs if you ever want that later
+window.setActiveTab = setActiveTab;

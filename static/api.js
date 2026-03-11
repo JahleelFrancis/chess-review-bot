@@ -6,125 +6,135 @@
   Because we're not using a bundler, these functions are attached to window:
   - window.fetchData(url): fetch archives for a username and render archive buttons
   - window.fetchArchiveGames(username, archive): fetch games in a specific month and render game buttons
-  - window.postData({pgn}): POST to /api/analyze (currently placeholder response)
+  - window.postData({pgn}): POST to /api/analyze (returns fens + moves right now)
 
-  UI Flow today:
+  UI Flow now:
   - fetchData() renders monthly archive buttons
   - clicking an archive calls fetchArchiveGames()
-  - clicking a game renders game details + PGN
-  - clicking "Analyze Game" sends PGN to /api/analyze via postData()
+  - clicking a game:
+      1) renders Info panel (metadata + PGN)
+      2) immediately calls /api/analyze to get fens+moves
+      3) initializes board/moves UI via window.initAnalysisUI(result)
+      4) switches to Moves tab (Option 1)
+      5) enables the bottom-bar Analyze button (Stockfish later)
 */
+
+// Small helper to let UI repaint before heavy work (optional but nice)
 async function yieldNextFrame() {
-    return new Promise(resolve => requestAnimationFrame(() => resolve()));
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
 
-async function analyzeGame() {
-    const analysisResult = await window.postData({ pgn: window.selectedGamePGN });
-    console.log("Analysis result:", analysisResult);
-    return analysisResult;
+// Lightweight "analysis" for now = parse PGN -> return { fens, moves } from backend
+async function analyzeGameFromPGN(pgn) {
+  const analysisResult = await window.postData({ pgn });
+  console.log("Analysis result:", analysisResult);
+  return analysisResult;
+}
+
+// Enable the Analyze button that ui.js created in the bottom control bar.
+// We don't modify ui.js here; we just find it in the controls container.
+function enableBottomAnalyzeButton() {
+  const controls = document.getElementById("analysisControls");
+  if (!controls) return;
+
+  const buttons = Array.from(controls.querySelectorAll("button"));
+  const analyzeBtn = buttons.find((b) => (b.innerText || "").trim() === "Analyze");
+  if (analyzeBtn) analyzeBtn.disabled = false;
 }
 
 window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
-    // Backend endpoint for a month's games:
-    // /api/chesscom/{username}/games?archive=YYYY/MM
-    const archiveUrl = `/api/chesscom/${username}/games?archive=${archive}`;
+  // Backend endpoint for a month's games:
+  // /api/chesscom/{username}/games?archive=YYYY/MM
+  const archiveUrl = `/api/chesscom/${username}/games?archive=${archive}`;
 
-    try {
-        const response = await fetch(archiveUrl);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const gamesDiv = document.getElementById("games");
-        gamesDiv.innerHTML = "";
-
-        // Render each game as a button the user can click to inspect details/PGN
-        data.games.forEach(game => {
-          // Determine outcome label based on Chess.com result fields
-          let outcome = "Draw";
-          if (game.white.result === "win") {
-              outcome = "White Wins";
-          } else if (game.black.result === "win") {
-              outcome = "Black Wins";
-          }
-
-          const gameButton = document.createElement('button');
-          gameButton.innerText = `${game.white.username} (W) vs ${game.black.username} (B) - ${outcome}`;
-
-          /*
-            Clicking a game:
-            - Populates the analysis panel with game metadata
-            - Displays PGN in a <pre>
-            - Sends PGN to /api/analyze (temporary wiring; later this will be an explicit "Analyze" button)
-          */
-          gameButton.onclick = function handleGameButtonClick() {
-              const analysisDiv = document.getElementById("analysis");
-              analysisDiv.innerHTML = `
-                  <h3>Game Analysis</h3>
-                  <p><strong>White:</strong> ${game.white.username} (${game.white.rating})</p>
-                  <p><strong>Black:</strong> ${game.black.username} (${game.black.rating})</p>
-                  <p><strong>Result:</strong> ${outcome}</p>
-                  <p><strong>Time Control:</strong> ${game.time_control}</p>
-                  <p><strong>Date:</strong> ${new Date(game.end_time * 1000).toLocaleDateString()}</p>
-                  <p><a href="${game.url}" target="_blank">View on Chess.com</a></p>
-                  <h3>PGN:</h3>
-                  <pre id="pgnBox"></pre>
-                  <button id="analyzeButton">Analyze Game</button>
-                  `;
-
-              // Show raw PGN text (later: parse into moves/FEN for the analysis view)
-              document.getElementById("pgnBox").innerText = game.pgn;
-
-              window.selectedGamePGN = game.pgn; // Store globally for potential later use
-              console.log("Selected game PGN:", window.selectedGamePGN);
-
-
-              const analyzeButton = document.getElementById("analyzeButton");
-              analyzeButton.onclick = async function() {
-                  analyzeButton.innerText = "Analyzing...";
-                  analyzeButton.disabled = true;
-                  let result;
-                  await yieldNextFrame(); // Allow UI to update before analysis starts
-                  try{
-                      result = await analyzeGame();
-                      if(result == null){
-                          alert("Analysis failed. Please try again."); // Handle case where postData returns null due to an error
-                          return;
-                      }
-                      window.analysisResult = result; // Store analysis result globally for potential later use
-
-                      if (typeof window.initAnalysisUI === "function") {
-                        window.initAnalysisUI(result);
-                      } else {
-                        console.warn("window.initAnalysisUI is not defined. Skipping UI initialization.");
-                      }
-
-
-                      console.log(result.moves.length);
-                      console.log(result.fens.length);
-                      console.log(result.fens[0]);
-                      console.log(result.fens[result.fens.length - 1]);
-
-                  }catch(error){
-                      console.error("Error during analysis:", error);
-                      alert("An error occurred during analysis. Please try again.");
-                      
-                  }finally{
-                    analyzeButton.disabled = false;
-                    analyzeButton.innerText = "Analyze Game";
-                  }
-
-              }
-          }
-
-          gamesDiv.appendChild(gameButton);
-        });
-
-    } catch (error) {
-        console.error("Error fetching archive games:", error);
+  try {
+    const response = await fetch(archiveUrl);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
-}
+
+    const data = await response.json();
+    const gamesDiv = document.getElementById("games");
+    gamesDiv.innerHTML = "";
+
+    // Render each game as a button the user can click to inspect details/PGN
+    data.games.forEach((game) => {
+      // Determine outcome label based on Chess.com result fields
+      let outcome = "Draw";
+      if (game.white.result === "win") {
+        outcome = "White Wins";
+      } else if (game.black.result === "win") {
+        outcome = "Black Wins";
+      }
+
+      const gameButton = document.createElement("button");
+      gameButton.innerText = `${game.white.username} (W) vs ${game.black.username} (B) - ${outcome}`;
+
+      /*
+        Clicking a game (NEW FLOW):
+        - Render Info panel (metadata + PGN)
+        - Immediately call /api/analyze to get fens + moves (lightweight)
+        - Initialize board + move list right away
+        - Switch to Moves tab (Option 1)
+        - Enable bottom Analyze button (Stockfish later)
+      */
+      gameButton.onclick = async function handleGameButtonClick() {
+        // Store PGN globally (future: stockfish analysis button uses this)
+        window.selectedGamePGN = game.pgn;
+        console.log("Selected game PGN:", window.selectedGamePGN);
+
+        // Render Info panel (NO analyze button here anymore)
+        const analysisDiv = document.getElementById("analysis");
+        analysisDiv.innerHTML = `
+          <h3>Game Analysis</h3>
+          <p><strong>White:</strong> ${game.white.username} (${game.white.rating})</p>
+          <p><strong>Black:</strong> ${game.black.username} (${game.black.rating})</p>
+          <p><strong>Result:</strong> ${outcome}</p>
+          <p><strong>Time Control:</strong> ${game.time_control}</p>
+          <p><strong>Date:</strong> ${new Date(game.end_time * 1000).toLocaleDateString()}</p>
+          <p><a href="${game.url}" target="_blank">View on Chess.com</a></p>
+          <h3>PGN:</h3>
+          <pre id="pgnBox"></pre>
+        `;
+
+        document.getElementById("pgnBox").innerText = game.pgn;
+
+        // Optional: briefly show info tab while loading (then we jump to moves after init)
+        if (window.setActiveTab) window.setActiveTab("info");
+
+        await yieldNextFrame();
+
+        try {
+          const result = await analyzeGameFromPGN(window.selectedGamePGN);
+          if (!result) {
+            alert("Failed to load game. Please try again.");
+            return;
+          }
+
+          // Initialize board + move list UI
+          if (typeof window.initAnalysisUI === "function") {
+            window.initAnalysisUI(result);
+          } else {
+            console.warn("window.initAnalysisUI is not defined. Skipping UI initialization.");
+          }
+
+          // Option 1: show Moves tab immediately after board/moves render
+          if (window.setActiveTab) window.setActiveTab("moves");
+
+          // Enable the bottom-bar Analyze button (Stockfish later)
+          enableBottomAnalyzeButton();
+        } catch (error) {
+          console.error("Error during game load:", error);
+          alert("An error occurred while loading the game. Please try again.");
+        }
+      };
+
+      gamesDiv.appendChild(gameButton);
+    });
+  } catch (error) {
+    console.error("Error fetching archive games:", error);
+  }
+};
 
 /*
   fetchData(url)
@@ -154,28 +164,27 @@ window.fetchData = async function fetchData(url) {
     archivesDiv.innerHTML = "";
 
     // Create one button per archive month
-    data.archives.forEach(archive => {
-        const archiveButton = document.createElement('button');
+    data.archives.forEach((archive) => {
+      const archiveButton = document.createElement("button");
 
-        // Convert archive URL into "YYYY/MM" for the query param,
-        // and display it in a more readable "Archive: MM / YYYY" format
-        const archiveSegments = archive.split('/');
-        const archiveMonth = archiveSegments.at(-1);
-        const archiveYear = archiveSegments.at(-2);
-        const archiveParam = `${archiveYear}/${archiveMonth}`;
+      // Convert archive URL into "YYYY/MM" for the query param,
+      // and display it in a more readable "Archive: MM / YYYY" format
+      const archiveSegments = archive.split("/");
+      const archiveMonth = archiveSegments.at(-1);
+      const archiveYear = archiveSegments.at(-2);
+      const archiveParam = `${archiveYear}/${archiveMonth}`;
 
-        archiveButton.innerText = `Archive: ${archiveMonth} / ${archiveYear}`;
+      archiveButton.innerText = `Archive: ${archiveMonth} / ${archiveYear}`;
 
-        // Clicking an archive fetches the games in that month and renders game buttons
-        archiveButton.onclick = () => window.fetchArchiveGames(window.currentUsername, archiveParam);
+      // Clicking an archive fetches the games in that month and renders game buttons
+      archiveButton.onclick = () => window.fetchArchiveGames(window.currentUsername, archiveParam);
 
-        archivesDiv.appendChild(archiveButton);
+      archivesDiv.appendChild(archiveButton);
     });
-
   } catch (error) {
     console.error("Error fetching data:", error);
   }
-}
+};
 
 /*
   postData(data)
@@ -184,8 +193,8 @@ window.fetchData = async function fetchData(url) {
 
   Current usage:
   - Sends { pgn: "<PGN text>" } to /api/analyze
-  - Backend currently returns a placeholder response
-  - Later: backend will return moves, FENs, and Stockfish eval/best lines
+  - Backend returns fens + moves (lightweight parsing)
+  - Later: backend will return Stockfish eval/best lines when Analyze is pressed
 */
 window.postData = async function postData(data = {}) {
   const postURL = "/api/analyze";
@@ -194,7 +203,7 @@ window.postData = async function postData(data = {}) {
     const response = await fetch(postURL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
     });
 
     // Try JSON first; fall back to text if needed
@@ -212,9 +221,8 @@ window.postData = async function postData(data = {}) {
       console.error("Error response:", response.status, payload);
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-
   } catch (error) {
     console.error("Error posting data:", error);
     return null;
   }
-}
+};
