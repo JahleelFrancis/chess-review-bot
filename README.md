@@ -1,28 +1,29 @@
 # Chess Review Bot (WIP)
 
-Web app that imports public Chess.com games and generates engine-based game reviews using Stockfish.
+A web app that imports public Chess.com games and generates engine-based game reviews (Stockfish planned).
 
-## Current Features
+## What it does right now
 - FastAPI backend serving a static frontend
-- Frontend calls backend API endpoints with vanilla JS
-- Git repo set up with proper ignores
-
-## Planned Features
-- Import games by Chess.com username (monthly archives)
-- Select a game and display PGN + moves
-- Stockfish analysis (eval + best line per move)
-- Move classification (best/good/inaccuracy/mistake/blunder)
-- Key moments + basic accuracy score
-- UI upgrade (board view, arrows, nicer review page)
+- Fetches Chess.com monthly archives for a username
+- Lists games for a selected month
+- “Analysis mode” UI:
+  - chessboard.js board preview
+  - move list + clickable navigation
+  - moves/info tabs
+  - back button to return to archive/game browsing
 
 ## Tech Stack
-- Python, FastAPI
+- Python + FastAPI
 - Vanilla HTML/CSS/JS
-- python-chess + Stockfish (UCI)
+- python-chess (PGN parsing / FEN generation)
+- Stockfish (planned, via UCI)
 
-## Run Locally
+## Run locally
 ```bash
 python -m venv venv
-venv\Scripts\activate
+
+# Windows (PowerShell)
+.\venv\Scripts\Activate.ps1
+
 pip install -r backend/requirements.txt
 uvicorn backend.main:app --reload
