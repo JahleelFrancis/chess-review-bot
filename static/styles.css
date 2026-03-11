@@ -1,9 +1,95 @@
+/* ---------------------------
+   Browse layout (Archives | Games)
+---------------------------- */
+#browseLayout {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  margin-top: 12px;
+  margin-bottom: 12px;
+}
+
+.panel {
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.panelHeader {
+  padding: 10px 12px;
+  font-weight: 700;
+  border-bottom: 1px solid #eee;
+  background: #f7f7f7;
+}
+
+#archivesPanel {
+  width: 360px;
+}
+
+#gamesPanel {
+  flex: 1;
+  min-width: 420px;
+}
+
+.hidden {
+  display: none;
+}
+
+.dataTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+}
+
+.dataTable th,
+.dataTable td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.dataTable th {
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #666;
+  background: #fafafa;
+}
+
+.dataRow {
+  cursor: pointer;
+}
+
+.dataRow:hover {
+  background: #f3f3f3;
+}
+
+.dataRow.active {
+  background: #e7f1ff;
+  outline: 2px solid #0b57d0;
+  outline-offset: -2px;
+}
+
+.muted {
+  color: #777;
+}
+
+/* ---------------------------
+   Analysis layout
+---------------------------- */
 /* --- Analysis layout --- */
 #analysisLayout {
   display: none;           /* hidden initially */
   gap: 16px;
   align-items: flex-start;
   margin-top: 12px;
+
+  justify-content: center; /* center content when smaller than available width */
+  width: 100%;
+  margin-top: 16px;
 }
 
 #boardColumn {
@@ -64,6 +150,11 @@
 .tab-button.active {
   background: #ffffff;
   border-color: #888;
+}
+
+.tab-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Panels share same “viewport” height so layout doesn’t jump */

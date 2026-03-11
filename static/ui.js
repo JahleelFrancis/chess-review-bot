@@ -12,7 +12,6 @@ function setActiveTab(tabName) {
     movesPanel.classList.remove("active");
     infoPanel.classList.add("active");
   } else {
-    // default to moves
     tabInfo.classList.remove("active");
     tabMoves.classList.add("active");
     infoPanel.classList.remove("active");
@@ -31,7 +30,6 @@ function ensureTabsInitialized() {
   tabMoves.onclick = () => setActiveTab("moves");
   tabInfo.onclick = () => setActiveTab("info");
 
-  // default view: Moves (so you aren’t bombarded with PGN/info)
   setActiveTab("moves");
 
   window.__tabsInitialized = true;
@@ -41,16 +39,13 @@ function updateActiveMoveHighlight() {
   const moveListDiv = document.getElementById("moveList");
   if (!moveListDiv) return;
 
-  // remove existing highlight
   moveListDiv
     .querySelectorAll(".move-cell.active-move")
     .forEach((el) => el.classList.remove("active-move"));
 
   if (!window.analysisResult || window.currentMoveIndex <= 0) return;
 
-  // fen index -> ply index
   const ply = window.currentMoveIndex - 1;
-
   const cell = moveListDiv.querySelector(`.move-cell[data-ply="${ply}"]`);
   if (!cell) return;
 
@@ -58,19 +53,41 @@ function updateActiveMoveHighlight() {
   cell.scrollIntoView({ block: "nearest" });
 }
 
-// Called from api.js once we have analysis data ready to go
+// Helpers for 2-mode UI (Browse vs Analysis)
+function showAnalysisMode() {
+  const browse = document.getElementById("browseLayout");
+  const analysis = document.getElementById("analysisLayout");
+
+  if (browse) browse.style.display = "none";
+  if (analysis) analysis.style.display = "flex";
+}
+
+function showBrowseMode() {
+  const browse = document.getElementById("browseLayout");
+  const analysis = document.getElementById("analysisLayout");
+
+  if (analysis) analysis.style.display = "none";
+  if (browse) browse.style.display = "flex";
+
+  // Optional: put tabs back into "locked" state until next game is selected
+  const tabMoves = document.getElementById("tabMoves");
+  if (tabMoves) tabMoves.disabled = true;
+
+  // Optional: default tab when next analysis opens
+  setActiveTab("moves");
+}
+
 window.initAnalysisUI = function initAnalysisUI(analysisResult) {
   ensureTabsInitialized();
-  const tabMoves = document.getElementById("tabMoves");
-  if (tabMoves) tabMoves.disabled = false; // enable tabs once analysis is ready
-  
-  const layout = document.getElementById("analysisLayout");
-  if (layout) layout.style.display = "flex"; // show the layout once we have data to display
 
-  // When analysis loads, show Moves tab by default
+  // Switch modes immediately (hide tables, show centered analysis view)
+  showAnalysisMode();
+
+  const tabMoves = document.getElementById("tabMoves");
+  if (tabMoves) tabMoves.disabled = false;
+
   setActiveTab("moves");
 
-  // Basic guard so we don't crash if something unexpected is passed in
   if (
     !analysisResult ||
     !Array.isArray(analysisResult.fens) ||
@@ -91,6 +108,13 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
     const controls = document.getElementById("analysisControls");
     controls.innerHTML = "";
 
+    // NEW: Back button (one-time)
+    const backBtn = document.createElement("button");
+    backBtn.innerText = "Back";
+    backBtn.onclick = function () {
+      showBrowseMode();
+    };
+
     const prevBtn = document.createElement("button");
     prevBtn.innerText = "Previous Move";
 
@@ -102,8 +126,10 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
 
     const analyzeBtn = document.createElement("button");
     analyzeBtn.innerText = "Analyze";
-    analyzeBtn.disabled = true; // enabled once a game is loaded
+    analyzeBtn.disabled = true;
 
+    // Back comes first (Chess.com vibe)
+    controls.appendChild(backBtn);
     controls.appendChild(prevBtn);
     controls.appendChild(resetBtn);
     controls.appendChild(nextBtn);
@@ -138,19 +164,17 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
     };
 
     analyzeBtn.onclick = function () {
-    alert("Stockfish analysis coming soon 🙂");
+      alert("Stockfish analysis coming soon 🙂");
     };
   }
 
-  // Store analysis for other handlers
+  // Store analysis result globally for easy access in controls
   window.analysisResult = analysisResult;
   window.currentMoveIndex = 0;
   window.maxIndex = analysisResult.fens.length - 1;
 
-  // Render start position (no animation)
   window.boardApi.position(analysisResult.fens[0], false);
 
-  // Build move table (move number | white | black)
   const moveListDiv = document.getElementById("moveList");
   if (!moveListDiv) return;
 
@@ -161,6 +185,7 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
 
   const moves = analysisResult.moves || [];
 
+  // Iterate over moves in pairs (white+black) to create rows
   for (let ply = 0; ply < moves.length; ply += 2) {
     const moveNumber = ply / 2 + 1;
     const whiteMove = moves[ply];
@@ -190,7 +215,6 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
 
   moveListDiv.appendChild(table);
 
-  // Click-to-jump (event delegation)
   moveListDiv.onclick = function (e) {
     const cell = e.target.closest(".move-cell");
     if (!cell) return;
@@ -201,7 +225,6 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
     const ply = Number(plyStr);
     if (!Number.isFinite(ply)) return;
 
-    // ply 0 => fens[1]
     window.currentMoveIndex = ply + 1;
     window.boardApi.position(analysisResult.fens[window.currentMoveIndex], true);
     updateActiveMoveHighlight();
@@ -210,5 +233,4 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
   updateActiveMoveHighlight();
 };
 
-// Optional: allow other files to switch tabs if you ever want that later
 window.setActiveTab = setActiveTab;

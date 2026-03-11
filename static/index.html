@@ -10,9 +10,7 @@
   </head>
 
   <body>
-    <h1>title</h1>
-    <p>If you can see this, FastAPI is serving your frontend.</p>
-    <p>This web application allows you to review chess games.</p>
+    <h1>Chess Review Bot</h1>
 
     <form id="usernameForm">
       <label for="username">Enter your Chess.com username:</label>
@@ -20,8 +18,18 @@
       <button type="button" id="fetchGamesButton">Fetch Games</button>
     </form>
 
-    <div id="archives"></div>
-    <div id="games"></div>
+    <!-- Browse view layout -->
+    <div id="browseLayout">
+      <div class="panel" id="archivesPanel">
+        <div class="panelHeader">Archives</div>
+        <div id="archives"></div>
+      </div>
+
+      <div class="panel hidden" id="gamesPanel">
+        <div class="panelHeader" id="gamesHeader">Games</div>
+        <div id="games"></div>
+      </div>
+    </div>
 
     <!-- Analysis view layout -->
     <div id="analysisLayout">
@@ -43,7 +51,6 @@
           </div>
 
           <div id="infoPanel" class="tab-panel">
-            <!-- api.js writes into here (game info + PGN + Analyze button) -->
             <div id="analysis"></div>
           </div>
         </div>

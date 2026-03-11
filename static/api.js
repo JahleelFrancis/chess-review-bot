@@ -3,20 +3,18 @@
   ------
   Backend/API + DOM rendering helpers.
 
-  Because we're not using a bundler, these functions are attached to window:
-  - window.fetchData(url): fetch archives for a username and render archive buttons
-  - window.fetchArchiveGames(username, archive): fetch games in a specific month and render game buttons
-  - window.postData({pgn}): POST to /api/analyze (returns fens + moves right now)
-
-  UI Flow now:
-  - fetchData() renders monthly archive buttons
+  NEW browse flow (SteamDB-ish):
+  - fetchData() renders Archives as a table (Month + Games count placeholder)
   - clicking an archive calls fetchArchiveGames()
+      - shows Games panel (was hidden)
+      - renders Games as a table
+      - updates the selected archive's "Games" count (lazy fill)
   - clicking a game:
       1) renders Info panel (metadata + PGN)
-      2) immediately calls /api/analyze to get fens+moves
+      2) calls /api/analyze (lightweight: fens + moves)
       3) initializes board/moves UI via window.initAnalysisUI(result)
-      4) switches to Moves tab (Option 1)
-      5) enables the bottom-bar Analyze button (Stockfish later)
+      4) switches to Moves tab
+      5) enables bottom Analyze button (Stockfish later)
 */
 
 // Small helper to let UI repaint before heavy work (optional but nice)
@@ -42,48 +40,163 @@ function enableBottomAnalyzeButton() {
   if (analyzeBtn) analyzeBtn.disabled = false;
 }
 
+/*
+  fetchData(url)
+  --------------
+  Fetch archives for a username, then render them in a table.
+
+  Why table + placeholder counts?
+  - The Chess.com archives endpoint only gives monthly URLs.
+  - It does NOT provide "number of games in that month".
+  - If we tried to show counts for every month, we'd need to call the "games" endpoint
+    for every archive month (tons of requests, slow, rate-limit risk).
+  - So we show "—" initially, and only fill the count for the archive that the user clicks.
+*/
+window.fetchData = async function fetchData(url) {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+    const data = await response.json();
+
+    const archivesDiv = document.getElementById("archives");
+    const gamesPanel = document.getElementById("gamesPanel");
+    const gamesDiv = document.getElementById("games");
+    const gamesHeader = document.getElementById("gamesHeader");
+
+    // Hide games panel until an archive is clicked
+    if (gamesPanel) gamesPanel.classList.add("hidden");
+    if (gamesDiv) gamesDiv.innerHTML = "";
+    if (gamesHeader) gamesHeader.innerText = "Games";
+
+    // Build archives table structure
+    archivesDiv.innerHTML = `
+      <table class="dataTable">
+        <thead>
+          <tr>
+            <th>Month</th>
+            <th>Games</th>
+          </tr>
+        </thead>
+        <tbody id="archivesTableBody"></tbody>
+      </table>
+    `;
+
+    const tbody = document.getElementById("archivesTableBody");
+    tbody.innerHTML = "";
+
+    data.archives.reverse().forEach((archiveUrl) => {});
+
+    // Each archive is a URL like ".../YYYY/MM"
+    data.archives.forEach((archiveUrl) => {
+      const segs = archiveUrl.split("/");
+      const month = segs.at(-1);
+      const year = segs.at(-2);
+
+      // This is what our backend expects as the query param
+      const archiveParam = `${year}/${month}`;
+
+      const tr = document.createElement("tr");
+      tr.className = "dataRow";
+      tr.dataset.archive = archiveParam;
+
+      tr.innerHTML = `
+        <td>${month} / ${year}</td>
+        <td class="muted" data-count="true">—</td>
+      `;
+
+      tr.onclick = () => {
+        // Highlight selected archive row
+        tbody.querySelectorAll(".dataRow.active").forEach((r) => r.classList.remove("active"));
+        tr.classList.add("active");
+
+        // Fetch games for this month and show them in the right column
+        window.fetchArchiveGames(window.currentUsername, archiveParam);
+      };
+
+      tbody.appendChild(tr);
+    });
+  } catch (error) {
+    console.error("Error fetching data:", error);
+  }
+};
+
+/*
+  fetchArchiveGames(username, archive)
+  -----------------------------------
+  Fetch all games for a given YYYY/MM, then render them as a table.
+
+  Also:
+  - Shows the Games panel (was hidden)
+  - Updates the archive row's "Games" count (lazy fill)
+*/
 window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
-  // Backend endpoint for a month's games:
-  // /api/chesscom/{username}/games?archive=YYYY/MM
   const archiveUrl = `/api/chesscom/${username}/games?archive=${archive}`;
 
   try {
     const response = await fetch(archiveUrl);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
     const data = await response.json();
+
+    const gamesPanel = document.getElementById("gamesPanel");
+    const gamesHeader = document.getElementById("gamesHeader");
     const gamesDiv = document.getElementById("games");
-    gamesDiv.innerHTML = "";
 
-    // Render each game as a button the user can click to inspect details/PGN
+    // Show the games column now that we have something to show
+    if (gamesPanel) gamesPanel.classList.remove("hidden");
+    if (gamesHeader) gamesHeader.innerText = `Games (${archive})`;
+
+    // Update the "Games" count cell in the selected archive row (lazy fill)
+    const row = document.querySelector(`tr.dataRow[data-archive="${archive}"]`);
+    if (row) {
+      const countCell = row.querySelector(`td[data-count="true"]`);
+      if (countCell) countCell.innerText = String(data.games.length);
+    }
+
+    // Render games as a table (SteamDB-ish)
+    gamesDiv.innerHTML = `
+      <table class="dataTable">
+        <thead>
+          <tr>
+            <th>Match</th>
+            <th>Result</th>
+            <th>TC</th>
+          </tr>
+        </thead>
+        <tbody id="gamesTableBody"></tbody>
+      </table>
+    `;
+
+    const tbody = document.getElementById("gamesTableBody");
+    tbody.innerHTML = "";
+
     data.games.forEach((game) => {
-      // Determine outcome label based on Chess.com result fields
       let outcome = "Draw";
-      if (game.white.result === "win") {
-        outcome = "White Wins";
-      } else if (game.black.result === "win") {
-        outcome = "Black Wins";
-      }
+      if (game.white.result === "win") outcome = "White Wins";
+      else if (game.black.result === "win") outcome = "Black Wins";
 
-      const gameButton = document.createElement("button");
-      gameButton.innerText = `${game.white.username} (W) vs ${game.black.username} (B) - ${outcome}`;
+      const tr = document.createElement("tr");
+      tr.className = "dataRow";
+
+      tr.innerHTML = `
+        <td>${game.white.username} vs ${game.black.username}</td>
+        <td>${outcome}</td>
+        <td class="muted">${game.time_control}</td>
+      `;
 
       /*
-        Clicking a game (NEW FLOW):
-        - Render Info panel (metadata + PGN)
-        - Immediately call /api/analyze to get fens + moves (lightweight)
-        - Initialize board + move list right away
-        - Switch to Moves tab (Option 1)
-        - Enable bottom Analyze button (Stockfish later)
+        Clicking a game:
+        - Fill Info tab (metadata + PGN)
+        - Call /api/analyze immediately to get fens+moves
+        - initAnalysisUI renders board+move list
+        - switch to Moves
       */
-      gameButton.onclick = async function handleGameButtonClick() {
-        // Store PGN globally (future: stockfish analysis button uses this)
+      tr.onclick = async () => {
+        // Store PGN globally (future stockfish uses this)
         window.selectedGamePGN = game.pgn;
-        console.log("Selected game PGN:", window.selectedGamePGN);
 
-        // Render Info panel (NO analyze button here anymore)
+        // Fill the Info panel
         const analysisDiv = document.getElementById("analysis");
         analysisDiv.innerHTML = `
           <h3>Game Analysis</h3>
@@ -96,10 +209,9 @@ window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
           <h3>PGN:</h3>
           <pre id="pgnBox"></pre>
         `;
-
         document.getElementById("pgnBox").innerText = game.pgn;
 
-        // Optional: briefly show info tab while loading (then we jump to moves after init)
+        // Optional: show info while loading
         if (window.setActiveTab) window.setActiveTab("info");
 
         await yieldNextFrame();
@@ -111,78 +223,26 @@ window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
             return;
           }
 
-          // Initialize board + move list UI
+          // Render analysis UI (board+move list+controls)
           if (typeof window.initAnalysisUI === "function") {
             window.initAnalysisUI(result);
-          } else {
-            console.warn("window.initAnalysisUI is not defined. Skipping UI initialization.");
           }
 
-          // Option 1: show Moves tab immediately after board/moves render
+          // Switch to Moves tab after it's ready
           if (window.setActiveTab) window.setActiveTab("moves");
 
-          // Enable the bottom-bar Analyze button (Stockfish later)
+          // Enable bottom Analyze button (Stockfish later)
           enableBottomAnalyzeButton();
-        } catch (error) {
-          console.error("Error during game load:", error);
-          alert("An error occurred while loading the game. Please try again.");
+        } catch (err) {
+          console.error("Error loading game analysis:", err);
+          alert("An error occurred while loading the game.");
         }
       };
 
-      gamesDiv.appendChild(gameButton);
+      tbody.appendChild(tr);
     });
   } catch (error) {
     console.error("Error fetching archive games:", error);
-  }
-};
-
-/*
-  fetchData(url)
-  --------------
-  Generic GET helper used for fetching and rendering archive months.
-
-  Current usage:
-  - Called from app.js after the user submits a username
-  - Expects a response like: { archives: ["https://.../YYYY/MM", ...] }
-  - Renders each archive month as a clickable button
-*/
-window.fetchData = async function fetchData(url) {
-  try {
-    const response = await fetch(url);
-
-    // If backend returns 404/500/etc, throw so it lands in catch()
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    // <div> container where we render archive buttons
-    const archivesDiv = document.getElementById("archives");
-
-    // Clear any previously displayed archives (important when fetching a new username)
-    archivesDiv.innerHTML = "";
-
-    // Create one button per archive month
-    data.archives.forEach((archive) => {
-      const archiveButton = document.createElement("button");
-
-      // Convert archive URL into "YYYY/MM" for the query param,
-      // and display it in a more readable "Archive: MM / YYYY" format
-      const archiveSegments = archive.split("/");
-      const archiveMonth = archiveSegments.at(-1);
-      const archiveYear = archiveSegments.at(-2);
-      const archiveParam = `${archiveYear}/${archiveMonth}`;
-
-      archiveButton.innerText = `Archive: ${archiveMonth} / ${archiveYear}`;
-
-      // Clicking an archive fetches the games in that month and renders game buttons
-      archiveButton.onclick = () => window.fetchArchiveGames(window.currentUsername, archiveParam);
-
-      archivesDiv.appendChild(archiveButton);
-    });
-  } catch (error) {
-    console.error("Error fetching data:", error);
   }
 };
 
@@ -206,7 +266,6 @@ window.postData = async function postData(data = {}) {
       body: JSON.stringify(data),
     });
 
-    // Try JSON first; fall back to text if needed
     let payload;
     try {
       payload = await response.json();
