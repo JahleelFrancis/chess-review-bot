@@ -1,5 +1,88 @@
+:root {
+  --bg: #0d1117;
+  --panel: #161b22;
+  --panel2: #0b1320;
+  --border: #21262d;
+  --text: #c9d1d9;
+  --muted: #8b949e;
+  --hover: #1f2733;
+  --accent: #58a6ff;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
+#page {
+  padding: 16px;
+}
+
 /* ---------------------------
-   Browse layout (Archives | Games)
+   Topbar
+---------------------------- */
+#topbar {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: #010409;
+  border-bottom: 1px solid var(--border);
+}
+
+#topbarTitle {
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+/* Username form moved into topbar */
+#usernameForm {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.topbarInputWrap {
+  width: 260px;
+}
+
+#usernameForm input {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  outline: none;
+}
+
+#usernameForm input:focus {
+  border-color: rgba(88, 166, 255, 0.8);
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
+}
+
+#fetchGamesButton {
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+#fetchGamesButton:hover {
+  background: var(--hover);
+}
+
+/* ---------------------------
+   Browse layout
 ---------------------------- */
 #browseLayout {
   display: flex;
@@ -10,210 +93,193 @@
 }
 
 .panel {
-  border: 1px solid #ddd;
-  border-radius: 10px;
-  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
   overflow: hidden;
 }
 
 .panelHeader {
   padding: 10px 12px;
-  font-weight: 700;
-  border-bottom: 1px solid #eee;
-  background: #f7f7f7;
+  font-weight: 800;
+  border-bottom: 1px solid var(--border);
+  background: #0b1220;
 }
 
-#archivesPanel {
-  width: 360px;
-}
-
-#gamesPanel {
-  flex: 1;
-  min-width: 420px;
-}
-
-.hidden {
-  display: none;
-}
+#archivesPanel { width: 360px; }
+#gamesPanel { flex: 1; min-width: 420px; }
+.hidden { display: none; }
 
 .dataTable {
   width: 100%;
   border-collapse: collapse;
-  font-family: system-ui, sans-serif;
   font-size: 14px;
 }
 
-.dataTable th,
-.dataTable td {
-  padding: 8px 10px;
-  border-bottom: 1px solid #eee;
+.dataTable th, .dataTable td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
   text-align: left;
   white-space: nowrap;
 }
 
 .dataTable th {
   font-size: 12px;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #666;
-  background: #fafafa;
+  color: var(--muted);
+  background: #0b1220;
 }
 
-.dataRow {
-  cursor: pointer;
-}
-
-.dataRow:hover {
-  background: #f3f3f3;
-}
+.dataRow { cursor: pointer; }
+.dataRow:hover { background: var(--hover); }
 
 .dataRow.active {
-  background: #e7f1ff;
-  outline: 2px solid #0b57d0;
+  background: rgba(88, 166, 255, 0.14);
+  outline: 2px solid rgba(88, 166, 255, 0.55);
   outline-offset: -2px;
 }
 
-.muted {
-  color: #777;
-}
+.muted { color: var(--muted); }
 
 /* ---------------------------
    Analysis layout
 ---------------------------- */
-/* --- Analysis layout --- */
 #analysisLayout {
-  display: none;           /* hidden initially */
+  display: none;
   gap: 16px;
   align-items: flex-start;
-  margin-top: 12px;
-
-  justify-content: center; /* center content when smaller than available width */
+  justify-content: center;
   width: 100%;
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
 #boardColumn {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
-/* Board */
-#board {
-  width: 420px; /* tweak this if you want */
+#analysisTopBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-/* Controls bar */
+#analysisTopBar button,
+#analysisControls button {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+#analysisTopBar button:hover,
+#analysisControls button:hover {
+  background: var(--hover);
+}
+
+#analyzeButtonTop:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+#board { width: 520px; }
+
+/* ✅ Center the control buttons under the board */
 #analysisControls {
   display: flex;
-  gap: 8px;
+  gap: 10px;
+  justify-content: center;   /* <-- this is the big one */
 }
 
-#analysisControls button {
-  padding: 8px 12px;
-  border: 1px solid #ccc;
-  background: #f7f7f7;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-#analysisControls button:hover {
-  background: #eee;
-}
-
-/* --- Right panel (tabs) --- */
-#rightPanel {
-  flex: 1;
-  max-width: 560px;
-}
+/* ---------------------------
+   Right panel / tabs
+---------------------------- */
+#rightPanel { flex: 1; max-width: 560px; }
 
 #tabBar {
   display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .tab-button {
   flex: 1;
-  padding: 10px 12px;
-  border: 1px solid #ccc;
-  background: #f3f3f3;
-  border-radius: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 12px;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 800;
 }
 
-.tab-button:hover {
-  background: #eaeaea;
-}
+.tab-button:hover { background: var(--hover); }
 
 .tab-button.active {
-  background: #ffffff;
-  border-color: #888;
+  border-color: rgba(88, 166, 255, 0.75);
+  box-shadow: 0 0 0 1px rgba(88, 166, 255, 0.25) inset;
 }
 
 .tab-button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
-/* Panels share same “viewport” height so layout doesn’t jump */
 #tabPanels {
-  border: 1px solid #ddd;
-  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
   overflow: hidden;
-  height: 520px; /* keeps the moves/info area stable */
-  background: #fff;
+  height: 560px;
+  background: var(--panel);
 }
 
 .tab-panel {
   display: none;
   height: 100%;
-  overflow-y: auto; /* lets PGN scroll without changing layout */
-  padding: 10px;
+  overflow-y: auto;
+  padding: 12px;
 }
 
-.tab-panel.active {
-  display: block;
-}
+.tab-panel.active { display: block; }
 
-/* --- Move table layout --- */
+/* Moves list */
 .move-table {
-  width: max-content; /* KEY: keeps white/black close together */
+  width: max-content;
   border-collapse: collapse;
-  font-family: system-ui, sans-serif;
   font-size: 14px;
 }
 
 .move-table td {
-  padding: 6px 10px;
-  border-bottom: 1px solid #eee;
-  vertical-align: middle;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
 
 .move-num {
   width: 36px;
   text-align: right;
-  color: #666;
-  padding-right: 8px;
+  color: var(--muted);
+  padding-right: 10px;
 }
 
 .move-cell {
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: 8px;
   user-select: none;
-  min-width: 72px; /* tight but readable */
-  text-align: left;
+  min-width: 84px;
 }
 
-.move-cell:hover {
-  background: #f3f3f3;
-}
+.move-cell:hover { background: var(--hover); }
 
 .move-cell.active-move {
-  background: #e7f1ff;
-  font-weight: 800;
-  color: #0b57d0;
-  outline: 2px solid #0b57d0;
+  background: rgba(88, 166, 255, 0.16);
+  color: var(--accent);
+  font-weight: 900;
+  outline: 2px solid rgba(88, 166, 255, 0.55);
 }

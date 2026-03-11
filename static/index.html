@@ -4,54 +4,76 @@
     <meta charset="utf-8" />
     <title>Chess Review Bot</title>
 
-    <!-- Vendor + app styles -->
     <link rel="stylesheet" href="/vendor/chessboard-1.0.0.min.css" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
 
   <body>
-    <h1>Chess Review Bot</h1>
-
-    <form id="usernameForm">
-      <label for="username">Enter your Chess.com username:</label>
-      <input type="text" id="username" name="username" required />
-      <button type="button" id="fetchGamesButton">Fetch Games</button>
-    </form>
-
-    <!-- Browse view layout -->
-    <div id="browseLayout">
-      <div class="panel" id="archivesPanel">
-        <div class="panelHeader">Archives</div>
-        <div id="archives"></div>
+    <div id="topbar">
+      <div id="topbarLeft">
+        <div id="topbarTitle">Chess Review Bot</div>
       </div>
 
-      <div class="panel hidden" id="gamesPanel">
-        <div class="panelHeader" id="gamesHeader">Games</div>
-        <div id="games"></div>
-      </div>
+      <!-- Username input moved into topbar (right) -->
+      <form id="usernameForm">
+        <div class="topbarInputWrap">
+          <input
+            type="text"
+            id="username"
+            name="username"
+            placeholder="Enter username"
+            autocomplete="off"
+            required
+          />
+        </div>
+        <button type="button" id="fetchGamesButton">Fetch</button>
+      </form>
     </div>
 
-    <!-- Analysis view layout -->
-    <div id="analysisLayout">
-      <div id="boardColumn">
-        <div id="board"></div>
-        <div id="analysisControls"></div>
-      </div>
-
-      <!-- Right panel: tabs -->
-      <div id="rightPanel">
-        <div id="tabBar">
-          <button id="tabMoves" class="tab-button" type="button" disabled>Moves</button>
-          <button id="tabInfo" class="tab-button active" type="button">Info</button>
+    <div id="page">
+      <!-- Browse mode -->
+      <div id="browseLayout">
+        <div class="panel" id="archivesPanel">
+          <div class="panelHeader">Archives</div>
+          <div id="archives"></div>
         </div>
 
-        <div id="tabPanels">
-          <div id="movesPanel" class="tab-panel active">
-            <div id="moveList"></div>
+        <div class="panel hidden" id="gamesPanel">
+          <div class="panelHeader" id="gamesHeader">Games</div>
+          <div id="games"></div>
+        </div>
+      </div>
+
+      <!-- Analysis mode -->
+      <div id="analysisLayout">
+        <div id="boardColumn">
+          <div id="analysisTopBar">
+            <button id="backButtonTop" type="button">← Back</button>
+            <button id="analyzeButtonTop" type="button">Analyze</button>
           </div>
 
-          <div id="infoPanel" class="tab-panel">
-            <div id="analysis"></div>
+          <div id="board"></div>
+          <div id="analysisControls"></div>
+        </div>
+
+        <div id="rightPanel">
+          <div id="tabBar">
+            <button id="tabMoves" class="tab-button" type="button" disabled>
+              Moves
+            </button>
+            <button id="tabInfo" class="tab-button active" type="button">
+              Info
+            </button>
+          </div>
+
+          <div id="tabPanels">
+            <div id="movesPanel" class="tab-panel active">
+              <div id="moveList"></div>
+            </div>
+
+            <div id="infoPanel" class="tab-panel">
+              <div id="analysis"></div>
+            </div>
           </div>
         </div>
       </div>

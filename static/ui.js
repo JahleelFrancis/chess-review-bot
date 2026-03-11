@@ -69,20 +69,34 @@ function showBrowseMode() {
   if (analysis) analysis.style.display = "none";
   if (browse) browse.style.display = "flex";
 
-  // Optional: put tabs back into "locked" state until next game is selected
   const tabMoves = document.getElementById("tabMoves");
   if (tabMoves) tabMoves.disabled = true;
 
-  // Optional: default tab when next analysis opens
   setActiveTab("moves");
 }
 
 window.initAnalysisUI = function initAnalysisUI(analysisResult) {
   ensureTabsInitialized();
 
-  // Switch modes immediately (hide tables, show centered analysis view)
   showAnalysisMode();
 
+  // Bind TOP back once
+  const topBack = document.getElementById("backButtonTop");
+  if (topBack && !topBack.dataset.bound) {
+    topBack.onclick = showBrowseMode;
+    topBack.dataset.bound = "true";
+  }
+
+  // Bind TOP analyze once (placeholder until Stockfish)
+  const topAnalyze = document.getElementById("analyzeButtonTop");
+  if (topAnalyze && !topAnalyze.dataset.bound) {
+    topAnalyze.onclick = function () {
+      alert("Stockfish analysis coming soon 🙂");
+    };
+    topAnalyze.dataset.bound = "true";
+  }
+
+  // Enable tabs
   const tabMoves = document.getElementById("tabMoves");
   if (tabMoves) tabMoves.disabled = false;
 
@@ -108,13 +122,6 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
     const controls = document.getElementById("analysisControls");
     controls.innerHTML = "";
 
-    // NEW: Back button (one-time)
-    const backBtn = document.createElement("button");
-    backBtn.innerText = "Back";
-    backBtn.onclick = function () {
-      showBrowseMode();
-    };
-
     const prevBtn = document.createElement("button");
     prevBtn.innerText = "Previous Move";
 
@@ -124,16 +131,10 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
     const nextBtn = document.createElement("button");
     nextBtn.innerText = "Next Move";
 
-    const analyzeBtn = document.createElement("button");
-    analyzeBtn.innerText = "Analyze";
-    analyzeBtn.disabled = true;
-
-    // Back comes first (Chess.com vibe)
-    controls.appendChild(backBtn);
+    // NOTE: Analyze removed from bottom row (now lives in top bar)
     controls.appendChild(prevBtn);
     controls.appendChild(resetBtn);
     controls.appendChild(nextBtn);
-    controls.appendChild(analyzeBtn);
 
     prevBtn.onclick = function () {
       if (window.currentMoveIndex > 0) {
@@ -162,19 +163,16 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
       }
       updateActiveMoveHighlight();
     };
-
-    analyzeBtn.onclick = function () {
-      alert("Stockfish analysis coming soon 🙂");
-    };
   }
 
-  // Store analysis result globally for easy access in controls
+  // Save analysis globally
   window.analysisResult = analysisResult;
   window.currentMoveIndex = 0;
   window.maxIndex = analysisResult.fens.length - 1;
 
   window.boardApi.position(analysisResult.fens[0], false);
 
+  // Build move list table
   const moveListDiv = document.getElementById("moveList");
   if (!moveListDiv) return;
 
@@ -185,7 +183,6 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
 
   const moves = analysisResult.moves || [];
 
-  // Iterate over moves in pairs (white+black) to create rows
   for (let ply = 0; ply < moves.length; ply += 2) {
     const moveNumber = ply / 2 + 1;
     const whiteMove = moves[ply];
