@@ -52,9 +52,17 @@ function updateActiveMoveHighlight() {
   cell.scrollIntoView({ block: "nearest" });
 }
 
+function initialsFromName(name, fallback) {
+  const value = String(name || "").trim();
+  if (!value) return fallback;
+  return value.slice(0, 1).toUpperCase();
+}
+
 function renderBoardPlayers() {
   const topName = document.getElementById("boardPlayerTopName");
   const bottomName = document.getElementById("boardPlayerBottomName");
+  const topAvatar = document.getElementById("boardPlayerTopAvatar");
+  const bottomAvatar = document.getElementById("boardPlayerBottomAvatar");
   const meta = window.currentGameMeta || {};
 
   if (topName) {
@@ -68,14 +76,88 @@ function renderBoardPlayers() {
       ? `${meta.whiteUsername}${meta.whiteRating ? ` (${meta.whiteRating})` : ""}`
       : "—";
   }
+
+  if (topAvatar) {
+    topAvatar.textContent = initialsFromName(meta.blackUsername, "B");
+  }
+
+  if (bottomAvatar) {
+    bottomAvatar.textContent = initialsFromName(meta.whiteUsername, "W");
+  }
 }
 
 function clearBoardPlayers() {
   const topName = document.getElementById("boardPlayerTopName");
   const bottomName = document.getElementById("boardPlayerBottomName");
+  const topAvatar = document.getElementById("boardPlayerTopAvatar");
+  const bottomAvatar = document.getElementById("boardPlayerBottomAvatar");
 
   if (topName) topName.textContent = "—";
   if (bottomName) bottomName.textContent = "—";
+  if (topAvatar) topAvatar.textContent = "B";
+  if (bottomAvatar) bottomAvatar.textContent = "W";
+}
+
+function buildEmptyState(title, text, icon = "") {
+  return `
+    <div class="emptyState compact">
+      ${icon ? `<div class="emptyStateIcon">${icon}</div>` : ""}
+      <div class="emptyStateTitle">${title}</div>
+      <div class="emptyStateText">${text}</div>
+    </div>
+  `;
+}
+
+function showLandingMode() {
+  const hero = document.getElementById("heroSection");
+  const browse = document.getElementById("browseLayout");
+  const analysis = document.getElementById("analysisLayout");
+  const form = document.getElementById("usernameForm");
+
+  if (hero) hero.classList.remove("hidden");
+  if (browse) {
+    browse.style.display = "none";
+    browse.classList.add("preHero");
+  }
+  if (analysis) analysis.style.display = "none";
+  if (form) form.classList.remove("visible");
+
+  window.hasExitedHero = false;
+}
+
+function showBrowseMode() {
+  const hero = document.getElementById("heroSection");
+  const browse = document.getElementById("browseLayout");
+  const analysis = document.getElementById("analysisLayout");
+  const form = document.getElementById("usernameForm");
+
+  if (hero) hero.classList.add("hidden");
+  if (analysis) analysis.style.display = "none";
+  if (browse) {
+    browse.classList.remove("preHero");
+    browse.style.display = "flex";
+  }
+  if (form) form.classList.add("visible");
+
+  const tabMoves = document.getElementById("tabMoves");
+  if (tabMoves) tabMoves.disabled = true;
+
+  setActiveTab("info");
+  window.hasExitedHero = true;
+}
+
+function showAnalysisMode() {
+  const hero = document.getElementById("heroSection");
+  const browse = document.getElementById("browseLayout");
+  const analysis = document.getElementById("analysisLayout");
+  const form = document.getElementById("usernameForm");
+
+  if (hero) hero.classList.add("hidden");
+  if (browse) browse.style.display = "none";
+  if (analysis) analysis.style.display = "grid";
+  if (form) form.classList.add("visible");
+
+  window.hasExitedHero = true;
 }
 
 function clearAnalysisState() {
@@ -86,37 +168,26 @@ function clearAnalysisState() {
   window.currentGameMeta = null;
 
   const moveListDiv = document.getElementById("moveList");
-  if (moveListDiv) moveListDiv.innerHTML = "";
+  if (moveListDiv) {
+    moveListDiv.innerHTML = buildEmptyState(
+      "Choose a game to begin analysis",
+      "Move-by-move review will appear here after you open a game."
+    );
+  }
 
   const analysisDiv = document.getElementById("analysis");
-  if (analysisDiv) analysisDiv.innerHTML = "";
+  if (analysisDiv) {
+    analysisDiv.innerHTML = buildEmptyState(
+      "Game details will appear here",
+      "Open a game to view metadata, PGN, and analysis context."
+    );
+  }
 
   clearBoardPlayers();
 
   if (window.boardApi) {
     window.boardApi.position("start", false);
   }
-
-  const tabMoves = document.getElementById("tabMoves");
-  if (tabMoves) tabMoves.disabled = true;
-
-  setActiveTab("info");
-}
-
-function showAnalysisMode() {
-  const browse = document.getElementById("browseLayout");
-  const analysis = document.getElementById("analysisLayout");
-
-  if (browse) browse.style.display = "none";
-  if (analysis) analysis.style.display = "grid";
-}
-
-function showBrowseMode() {
-  const browse = document.getElementById("browseLayout");
-  const analysis = document.getElementById("analysisLayout");
-
-  if (analysis) analysis.style.display = "none";
-  if (browse) browse.style.display = "flex";
 
   const tabMoves = document.getElementById("tabMoves");
   if (tabMoves) tabMoves.disabled = true;
@@ -244,6 +315,8 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
     const blackMove = moves[ply + 1];
 
     const tr = document.createElement("tr");
+    tr.className = "animatedRow";
+    tr.style.animationDelay = `${Math.min(ply, 10) * 14}ms`;
 
     const tdNum = document.createElement("td");
     tdNum.className = "move-num";
@@ -286,6 +359,7 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
 };
 
 window.setActiveTab = setActiveTab;
+window.showLandingMode = showLandingMode;
 window.showBrowseMode = showBrowseMode;
 window.showAnalysisMode = showAnalysisMode;
 window.clearAnalysisState = clearAnalysisState;

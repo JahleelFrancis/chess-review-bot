@@ -12,40 +12,73 @@
   <body>
     <div id="topbar">
       <div id="topbarLeft">
+        <span class="topbarTitleIcon" aria-hidden="true">♔</span>
         <div id="topbarTitle">Chess Review Bot</div>
       </div>
 
       <form id="usernameForm">
         <div class="topbarInputWrap">
+          <svg
+            class="topbarSearchIcon"
+            width="15"
+            height="15"
+            viewBox="0 0 16 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <circle
+              cx="6.5"
+              cy="6.5"
+              r="5"
+              stroke="currentColor"
+              stroke-width="1.7"
+            />
+            <line
+              x1="10.7"
+              y1="10.7"
+              x2="14.5"
+              y2="14.5"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+            />
+          </svg>
           <input
             type="text"
             id="username"
             name="username"
-            placeholder="Enter username"
+            placeholder="Search username..."
             autocomplete="off"
             required
           />
         </div>
-        <button type="button" id="fetchGamesButton">Fetch</button>
+        <button type="button" id="fetchGamesButton" style="display: none"></button>
       </form>
     </div>
 
     <div id="heroSection" class="heroSection">
+      <div class="heroGlow"></div>
+
       <div class="heroCard">
-        <h1 class="heroTitle">Chess Review Bot</h1>
+        <div class="heroEyebrow">Game review, rebuilt</div>
+        <h1 class="heroTitle">
+          Chess Review <span class="heroAccent">Bot</span>
+        </h1>
         <p class="heroSubtitle">
           Search any Chess.com username to browse monthly archives, inspect
           games, and jump into move-by-move review.
         </p>
 
         <form id="heroUsernameForm" class="heroForm">
-          <input
-            id="heroUsername"
-            type="text"
-            placeholder="Enter a Chess.com username"
-            autocomplete="off"
-          />
-          <button type="submit" id="heroFetchButton">Fetch Archives</button>
+          <div class="heroSearchBar">
+            <input
+              id="heroUsername"
+              type="text"
+              placeholder="Search username..."
+              autocomplete="off"
+            />
+            <button type="submit" id="heroFetchButton">Fetch Archives</button>
+          </div>
         </form>
       </div>
     </div>
@@ -54,27 +87,48 @@
       <div id="browseLayout">
         <div class="panel" id="archivesPanel">
           <div class="panelHeader" id="archivesHeader">Archives</div>
-          <div id="archives"></div>
+          <div id="archives">
+            <div class="emptyState">
+              <div class="emptyStateIcon">♟</div>
+              <div class="emptyStateTitle">Search a username to begin</div>
+              <div class="emptyStateText">
+                Monthly archives will appear here once a Chess.com account is loaded.
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="panel hidden" id="gamesPanel">
           <div class="panelHeader" id="gamesHeader">Games</div>
-          <div id="games"></div>
+          <div id="games">
+            <div class="emptyState compact">
+              <div class="emptyStateTitle">Select a month to view games</div>
+              <div class="emptyStateText">
+                Choose an archive from the left panel to load the game list.
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
       <div id="analysisLayout">
         <div id="boardColumn">
           <div class="boardPlayer boardPlayerTop">
-            <div class="boardPlayerLabel">Black</div>
-            <div class="boardPlayerName" id="boardPlayerTopName">—</div>
+            <div class="boardPlayerAvatar" id="boardPlayerTopAvatar">B</div>
+            <div class="boardPlayerMeta">
+              <div class="boardPlayerLabel">Black</div>
+              <div class="boardPlayerName" id="boardPlayerTopName">—</div>
+            </div>
           </div>
 
           <div id="board"></div>
 
-          <div class="boardPlayer boardPlayerBottom">
-            <div class="boardPlayerLabel">White</div>
-            <div class="boardPlayerName" id="boardPlayerBottomName">—</div>
+          <div class="boardPlayer boardPlayerBottom boardPlayerBottomAccent">
+            <div class="boardPlayerAvatar boardPlayerAvatarAccent" id="boardPlayerBottomAvatar">W</div>
+            <div class="boardPlayerMeta">
+              <div class="boardPlayerLabel">White</div>
+              <div class="boardPlayerName" id="boardPlayerBottomName">—</div>
+            </div>
           </div>
         </div>
 
@@ -90,11 +144,25 @@
 
           <div id="tabPanels">
             <div id="movesPanel" class="tab-panel active">
-              <div id="moveList"></div>
+              <div id="moveList">
+                <div class="emptyState compact">
+                  <div class="emptyStateTitle">Choose a game to begin analysis</div>
+                  <div class="emptyStateText">
+                    Move-by-move review will appear here after you open a game.
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div id="infoPanel" class="tab-panel">
-              <div id="analysis"></div>
+              <div id="analysis">
+                <div class="emptyState compact">
+                  <div class="emptyStateTitle">Game details will appear here</div>
+                  <div class="emptyStateText">
+                    Open a game to view metadata, PGN, and analysis context.
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -102,6 +170,13 @@
             <div id="analysisControls"></div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div id="loadingOverlay" class="loadingOverlay" aria-hidden="true">
+      <div class="loadingCard">
+        <div class="loadingSpinner" aria-hidden="true"></div>
+        <div id="loadingText" class="loadingText">Loading...</div>
       </div>
     </div>
 

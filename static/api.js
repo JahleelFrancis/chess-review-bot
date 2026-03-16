@@ -4,6 +4,32 @@
   Backend/API + DOM rendering helpers.
 */
 
+window._loadingCount = 0;
+
+window.beginLoading = function beginLoading(message = "Loading...") {
+  const overlay = document.getElementById("loadingOverlay");
+  const text = document.getElementById("loadingText");
+
+  window._loadingCount = (window._loadingCount || 0) + 1;
+
+  if (text) text.innerText = message;
+  if (overlay) {
+    overlay.classList.add("active");
+    overlay.setAttribute("aria-hidden", "false");
+  }
+};
+
+window.endLoading = function endLoading() {
+  const overlay = document.getElementById("loadingOverlay");
+
+  window._loadingCount = Math.max(0, (window._loadingCount || 0) - 1);
+
+  if (window._loadingCount === 0 && overlay) {
+    overlay.classList.remove("active");
+    overlay.setAttribute("aria-hidden", "true");
+  }
+};
+
 async function yieldNextFrame() {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
@@ -48,54 +74,30 @@ function updateGamesHeader(archive) {
   }
 }
 
-function findCanonicalUsernameFromGames(games, searchedUsername) {
-  const normalizedSearch = String(searchedUsername || "").trim().toLowerCase();
-  if (!normalizedSearch || !Array.isArray(games)) return null;
-
-  for (const game of games) {
-    const whiteUsername = game?.white?.username;
-    const blackUsername = game?.black?.username;
-
-    if (
-      whiteUsername &&
-      whiteUsername.trim().toLowerCase() === normalizedSearch
-    ) {
-      return whiteUsername;
-    }
-
-    if (
-      blackUsername &&
-      blackUsername.trim().toLowerCase() === normalizedSearch
-    ) {
-      return blackUsername;
-    }
-  }
-
-  return null;
-}
-
-window.fetchData = async function fetchData(url) {
+window.fetchData = async function fetchData(url, options = {}) {
   if (window._lastFetchedArchiveUrl === url) return;
+
+  window.beginLoading("Fetching archives...");
 
   try {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
     const data = await response.json();
-    console.log("archives response:", data);
-
     window._lastFetchedArchiveUrl = url;
 
     const archivesDiv = document.getElementById("archives");
     const gamesPanel = document.getElementById("gamesPanel");
     const gamesDiv = document.getElementById("games");
 
-    // FIX: use backend-provided canonical Chess.com username immediately
     if (data.username) {
       window.currentUsernameDisplay = data.username;
     }
 
-    // Reset browse-side state for new username search
+    if (typeof window.showBrowseMode === "function") {
+      window.showBrowseMode();
+    }
+
     if (gamesPanel) gamesPanel.classList.add("hidden");
     if (gamesDiv) gamesDiv.innerHTML = "";
     updateGamesHeader(null);
@@ -120,7 +122,7 @@ window.fetchData = async function fetchData(url) {
       ? [...data.archives].reverse()
       : [];
 
-    archiveList.forEach((archiveUrl, index) => {
+    archiveList.forEach((archiveUrl) => {
       const segs = archiveUrl.split("/");
       const month = segs.at(-1);
       const year = segs.at(-2);
@@ -129,7 +131,6 @@ window.fetchData = async function fetchData(url) {
       const tr = document.createElement("tr");
       tr.className = "dataRow";
       tr.dataset.archive = archiveParam;
-      tr.style.animationDelay = `${index * 25}ms`;
 
       tr.innerHTML = `
         <td>${month} / ${year}</td>
@@ -147,13 +148,21 @@ window.fetchData = async function fetchData(url) {
 
       tbody.appendChild(tr);
     });
+
+    if (options.pushHistory !== false && typeof window.pushBrowseHistory === "function") {
+      window.pushBrowseHistory();
+    }
   } catch (error) {
     console.error("Error fetching data:", error);
+  } finally {
+    window.endLoading();
   }
 };
 
 window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
   const archiveUrl = `/api/chesscom/${username}/games?archive=${archive}`;
+
+  window.beginLoading("Fetching games...");
 
   try {
     const response = await fetch(archiveUrl);
@@ -161,18 +170,14 @@ window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
 
     const data = await response.json();
 
-    // THIS is the reliable capitalization fix
-    const canonicalUsername = findCanonicalUsernameFromGames(data.games, username);
-    if (canonicalUsername) {
-      window.currentUsernameDisplay = canonicalUsername;
-      updateArchivesHeader();
-    }
-
     const gamesPanel = document.getElementById("gamesPanel");
+    const gamesHeader = document.getElementById("gamesHeader");
     const gamesDiv = document.getElementById("games");
 
     if (gamesPanel) gamesPanel.classList.remove("hidden");
-    updateGamesHeader(archive);
+    if (gamesHeader) {
+      gamesHeader.innerText = `${window.currentUsernameDisplay || username} • Games (${archive})`;
+    }
 
     const row = document.querySelector(`tr.dataRow[data-archive="${archive}"]`);
     if (row) {
@@ -209,35 +214,39 @@ window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
         <td>${outcome}</td>
         <td class="muted">${game.time_control}</td>
       `;
-      
+
       tr.onclick = async () => {
-        window.selectedGamePGN = game.pgn;
-        window.currentGameMeta = {
-          whiteUsername: game.white.username,
-          whiteRating: game.white.rating,
-          blackUsername: game.black.username,
-          blackRating: game.black.rating,
-        };
-
-        const analysisDiv = document.getElementById("analysis");
-        analysisDiv.innerHTML = `
-          <h3>Game Analysis</h3>
-          <p><strong>White:</strong> ${game.white.username} (${game.white.rating})</p>
-          <p><strong>Black:</strong> ${game.black.username} (${game.black.rating})</p>
-          <p><strong>Result:</strong> ${outcome}</p>
-          <p><strong>Time Control:</strong> ${game.time_control}</p>
-          <p><strong>Date:</strong> ${new Date(game.end_time * 1000).toLocaleDateString()}</p>
-          <p><a href="${game.url}" target="_blank">View on Chess.com</a></p>
-          <h3>PGN:</h3>
-          <pre id="pgnBox"></pre>
-        `;
-        document.getElementById("pgnBox").innerText = game.pgn;
-
-        if (window.setActiveTab) window.setActiveTab("info");
-
-        await yieldNextFrame();
+        window.beginLoading("Loading analysis...");
 
         try {
+          window.selectedGamePGN = game.pgn;
+          window.currentGameMeta = {
+            whiteUsername: game.white.username,
+            whiteRating: game.white.rating,
+            blackUsername: game.black.username,
+            blackRating: game.black.rating,
+          };
+
+          const analysisDiv = document.getElementById("analysis");
+          if (analysisDiv) {
+            analysisDiv.innerHTML = `
+              <h3>Game Analysis</h3>
+              <p><strong>White:</strong> ${game.white.username} (${game.white.rating})</p>
+              <p><strong>Black:</strong> ${game.black.username} (${game.black.rating})</p>
+              <p><strong>Result:</strong> ${outcome}</p>
+              <p><strong>Time Control:</strong> ${game.time_control}</p>
+              <p><strong>Date:</strong> ${new Date(game.end_time * 1000).toLocaleDateString()}</p>
+              <p><a href="${game.url}" target="_blank">View on Chess.com</a></p>
+              <h3>PGN:</h3>
+              <pre id="pgnBox"></pre>
+            `;
+            const pgnBox = document.getElementById("pgnBox");
+            if (pgnBox) pgnBox.innerText = game.pgn;
+          }
+
+          if (window.setActiveTab) window.setActiveTab("info");
+          await yieldNextFrame();
+
           const result = await analyzeGameFromPGN(window.selectedGamePGN);
           if (!result) {
             alert("Failed to load game. Please try again.");
@@ -248,10 +257,14 @@ window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
             window.initAnalysisUI(result);
           }
 
-          if (window.setActiveTab) window.setActiveTab("moves");
+          if (typeof window.pushAnalysisHistory === "function") {
+            window.pushAnalysisHistory();
+          }
         } catch (err) {
           console.error("Error loading game analysis:", err);
           alert("An error occurred while loading the game.");
+        } finally {
+          window.endLoading();
         }
       };
 
@@ -259,6 +272,8 @@ window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
     });
   } catch (error) {
     console.error("Error fetching archive games:", error);
+  } finally {
+    window.endLoading();
   }
 };
 
@@ -280,7 +295,6 @@ window.postData = async function postData(data = {}) {
     }
 
     if (response.ok) {
-      console.log("Analysis response:", payload);
       return payload;
     } else {
       console.error("Error response:", response.status, payload);
