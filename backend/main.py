@@ -1,3 +1,4 @@
+import asyncio
 import io
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -28,25 +29,56 @@ def normalize_username(username: str) -> str:
         raise HTTPException(status_code=400, detail="Username cannot be empty.")
     return username.strip().lower()
 
+# The chess.com API endpoint for fetching archives is /pub/player/{username}/games/archives
 @app.get("/api/chesscom/{username}/archives")
 async def get_chesscom_archives(username: str):
     username = normalize_username(username)
-    chesscom_url = f"https://api.chess.com/pub/player/{username}/games/archives"
+
+    archives_url = f"https://api.chess.com/pub/player/{username}/games/archives"
+
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(chesscom_url)
-            response.raise_for_status()
-            data = response.json()
-            return data
-        
+            archives_response = await client.get(archives_url)
+            archives_response.raise_for_status()
+            archives_data = archives_response.json()
+
+            archives = archives_data.get("archives", [])
+            canonical_username = username
+
+            # Try to resolve the real Chess.com capitalization immediately
+            if archives:
+                newest_archive_url = archives[-1]  # Chess.com returns oldest -> newest
+                games_response = await client.get(newest_archive_url)
+                games_response.raise_for_status()
+                games_data = games_response.json()
+
+                for game in games_data.get("games", []):
+                    white_username = game.get("white", {}).get("username", "")
+                    black_username = game.get("black", {}).get("username", "")
+
+                    if white_username.lower() == username:
+                        canonical_username = white_username
+                        break
+
+                    if black_username.lower() == username:
+                        canonical_username = black_username
+                        break
+
+            return {
+                "username": canonical_username,
+                "archives": archives
+            }
+
     except httpx.HTTPError as e:
         status_code = e.response.status_code if e.response else 502
         if status_code >= 500:
             status_code = 502
-        error_message = errorDictionary.get(status_code, "An unexpected error occurred.")
+        error_message = errorDictionary.get(
+            status_code, "An unexpected error occurred."
+        )
         raise HTTPException(status_code=status_code, detail=error_message)
     
-
+# The chess.com API endpoint for fetching games by month is /pub/player/{username}/games/{YYYY}/{MM}
 @app.get("/api/chesscom/{username}/games")
 async def get_chesscom_games(username: str, archive: str):
     username = normalize_username(username)
@@ -78,6 +110,7 @@ async def get_chesscom_games(username: str, archive: str):
         error_message = errorDictionary.get(status_code, "An unexpected error occurred.")
         raise HTTPException(status_code=status_code, detail=error_message)
 
+# This endpoint accepts PGN data, parses it, and returns an analysis of the game.
 @app.post("/api/analyze")
 async def analyze_game(response: PGNData):
     if not response.pgn or response.pgn.strip() == "":

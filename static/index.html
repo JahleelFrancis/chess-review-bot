@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
-    <meta charset="utf-8" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Chess Review Bot</title>
 
     <link rel="stylesheet" href="/vendor/chessboard-1.0.0.min.css" />
@@ -14,7 +15,6 @@
         <div id="topbarTitle">Chess Review Bot</div>
       </div>
 
-      <!-- Username input moved into topbar (right) -->
       <form id="usernameForm">
         <div class="topbarInputWrap">
           <input
@@ -30,11 +30,30 @@
       </form>
     </div>
 
+    <div id="heroSection" class="heroSection">
+      <div class="heroCard">
+        <h1 class="heroTitle">Chess Review Bot</h1>
+        <p class="heroSubtitle">
+          Search any Chess.com username to browse monthly archives, inspect
+          games, and jump into move-by-move review.
+        </p>
+
+        <form id="heroUsernameForm" class="heroForm">
+          <input
+            id="heroUsername"
+            type="text"
+            placeholder="Enter a Chess.com username"
+            autocomplete="off"
+          />
+          <button type="submit" id="heroFetchButton">Fetch Archives</button>
+        </form>
+      </div>
+    </div>
+
     <div id="page">
-      <!-- Browse mode -->
       <div id="browseLayout">
         <div class="panel" id="archivesPanel">
-          <div class="panelHeader">Archives</div>
+          <div class="panelHeader" id="archivesHeader">Archives</div>
           <div id="archives"></div>
         </div>
 
@@ -44,16 +63,19 @@
         </div>
       </div>
 
-      <!-- Analysis mode -->
       <div id="analysisLayout">
         <div id="boardColumn">
-          <div id="analysisTopBar">
-            <button id="backButtonTop" type="button">← Back</button>
-            <button id="analyzeButtonTop" type="button">Analyze</button>
+          <div class="boardPlayer boardPlayerTop">
+            <div class="boardPlayerLabel">Black</div>
+            <div class="boardPlayerName" id="boardPlayerTopName">—</div>
           </div>
 
           <div id="board"></div>
-          <div id="analysisControls"></div>
+
+          <div class="boardPlayer boardPlayerBottom">
+            <div class="boardPlayerLabel">White</div>
+            <div class="boardPlayerName" id="boardPlayerBottomName">—</div>
+          </div>
         </div>
 
         <div id="rightPanel">
@@ -75,15 +97,17 @@
               <div id="analysis"></div>
             </div>
           </div>
+
+          <div id="rightPanelFooter">
+            <div id="analysisControls"></div>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Vendor scripts -->
     <script src="/vendor/jquery.min.js"></script>
     <script src="/vendor/chessboard-1.0.0.js"></script>
 
-    <!-- App scripts -->
     <script src="/ui.js"></script>
     <script src="/api.js"></script>
     <script src="/app.js"></script>

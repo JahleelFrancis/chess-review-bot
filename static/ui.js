@@ -31,7 +31,6 @@ function ensureTabsInitialized() {
   tabInfo.onclick = () => setActiveTab("info");
 
   setActiveTab("moves");
-
   window.__tabsInitialized = true;
 }
 
@@ -53,13 +52,63 @@ function updateActiveMoveHighlight() {
   cell.scrollIntoView({ block: "nearest" });
 }
 
-// Helpers for 2-mode UI (Browse vs Analysis)
+function renderBoardPlayers() {
+  const topName = document.getElementById("boardPlayerTopName");
+  const bottomName = document.getElementById("boardPlayerBottomName");
+  const meta = window.currentGameMeta || {};
+
+  if (topName) {
+    topName.textContent = meta.blackUsername
+      ? `${meta.blackUsername}${meta.blackRating ? ` (${meta.blackRating})` : ""}`
+      : "—";
+  }
+
+  if (bottomName) {
+    bottomName.textContent = meta.whiteUsername
+      ? `${meta.whiteUsername}${meta.whiteRating ? ` (${meta.whiteRating})` : ""}`
+      : "—";
+  }
+}
+
+function clearBoardPlayers() {
+  const topName = document.getElementById("boardPlayerTopName");
+  const bottomName = document.getElementById("boardPlayerBottomName");
+
+  if (topName) topName.textContent = "—";
+  if (bottomName) bottomName.textContent = "—";
+}
+
+function clearAnalysisState() {
+  window.analysisResult = null;
+  window.currentMoveIndex = 0;
+  window.maxIndex = 0;
+  window.selectedGamePGN = null;
+  window.currentGameMeta = null;
+
+  const moveListDiv = document.getElementById("moveList");
+  if (moveListDiv) moveListDiv.innerHTML = "";
+
+  const analysisDiv = document.getElementById("analysis");
+  if (analysisDiv) analysisDiv.innerHTML = "";
+
+  clearBoardPlayers();
+
+  if (window.boardApi) {
+    window.boardApi.position("start", false);
+  }
+
+  const tabMoves = document.getElementById("tabMoves");
+  if (tabMoves) tabMoves.disabled = true;
+
+  setActiveTab("info");
+}
+
 function showAnalysisMode() {
   const browse = document.getElementById("browseLayout");
   const analysis = document.getElementById("analysisLayout");
 
   if (browse) browse.style.display = "none";
-  if (analysis) analysis.style.display = "flex";
+  if (analysis) analysis.style.display = "grid";
 }
 
 function showBrowseMode() {
@@ -72,31 +121,14 @@ function showBrowseMode() {
   const tabMoves = document.getElementById("tabMoves");
   if (tabMoves) tabMoves.disabled = true;
 
-  setActiveTab("moves");
+  setActiveTab("info");
 }
 
 window.initAnalysisUI = function initAnalysisUI(analysisResult) {
   ensureTabsInitialized();
-
   showAnalysisMode();
+  renderBoardPlayers();
 
-  // Bind TOP back once
-  const topBack = document.getElementById("backButtonTop");
-  if (topBack && !topBack.dataset.bound) {
-    topBack.onclick = showBrowseMode;
-    topBack.dataset.bound = "true";
-  }
-
-  // Bind TOP analyze once (placeholder until Stockfish)
-  const topAnalyze = document.getElementById("analyzeButtonTop");
-  if (topAnalyze && !topAnalyze.dataset.bound) {
-    topAnalyze.onclick = function () {
-      alert("Stockfish analysis coming soon 🙂");
-    };
-    topAnalyze.dataset.bound = "true";
-  }
-
-  // Enable tabs
   const tabMoves = document.getElementById("tabMoves");
   if (tabMoves) tabMoves.disabled = false;
 
@@ -111,32 +143,48 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
     return;
   }
 
-  // Create board + controls once
   if (!window.boardApi) {
     window.boardApi = Chessboard("board", {
       position: "start",
       pieceTheme: "/img/chesspieces/wikipedia/{piece}.png",
       draggable: false,
     });
+  }
 
-    const controls = document.getElementById("analysisControls");
+  const controls = document.getElementById("analysisControls");
+  if (controls) {
     controls.innerHTML = "";
 
-    const prevBtn = document.createElement("button");
-    prevBtn.innerText = "Previous Move";
-
     const resetBtn = document.createElement("button");
-    resetBtn.innerText = "Reset";
+    resetBtn.innerText = "<<";
+
+    const prevBtn = document.createElement("button");
+    prevBtn.innerText = "<";
+
+    const analyzeBtn = document.createElement("button");
+    analyzeBtn.innerText = "Analyze";
 
     const nextBtn = document.createElement("button");
-    nextBtn.innerText = "Next Move";
+    nextBtn.innerText = ">";
 
-    // NOTE: Analyze removed from bottom row (now lives in top bar)
-    controls.appendChild(prevBtn);
+    const lastMoveBtn = document.createElement("button");
+    lastMoveBtn.innerText = ">>";
+
     controls.appendChild(resetBtn);
+    controls.appendChild(prevBtn);
+    controls.appendChild(analyzeBtn);
     controls.appendChild(nextBtn);
+    controls.appendChild(lastMoveBtn);
+
+    resetBtn.onclick = function () {
+      if (!window.analysisResult) return;
+      window.currentMoveIndex = 0;
+      window.boardApi.position(window.analysisResult.fens[0], false);
+      updateActiveMoveHighlight();
+    };
 
     prevBtn.onclick = function () {
+      if (!window.analysisResult) return;
       if (window.currentMoveIndex > 0) {
         window.currentMoveIndex--;
         window.boardApi.position(
@@ -147,13 +195,12 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
       updateActiveMoveHighlight();
     };
 
-    resetBtn.onclick = function () {
-      window.currentMoveIndex = 0;
-      window.boardApi.position(window.analysisResult.fens[0], false);
-      updateActiveMoveHighlight();
+    analyzeBtn.onclick = function () {
+      alert("Stockfish analysis coming soon 🙂");
     };
 
     nextBtn.onclick = function () {
+      if (!window.analysisResult) return;
       if (window.currentMoveIndex < window.maxIndex) {
         window.currentMoveIndex++;
         window.boardApi.position(
@@ -163,16 +210,24 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
       }
       updateActiveMoveHighlight();
     };
+
+    lastMoveBtn.onclick = function () {
+      if (!window.analysisResult) return;
+      window.currentMoveIndex = window.maxIndex;
+      window.boardApi.position(
+        window.analysisResult.fens[window.currentMoveIndex],
+        true
+      );
+      updateActiveMoveHighlight();
+    };
   }
 
-  // Save analysis globally
   window.analysisResult = analysisResult;
   window.currentMoveIndex = 0;
   window.maxIndex = analysisResult.fens.length - 1;
 
   window.boardApi.position(analysisResult.fens[0], false);
 
-  // Build move list table
   const moveListDiv = document.getElementById("moveList");
   if (!moveListDiv) return;
 
@@ -231,3 +286,6 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
 };
 
 window.setActiveTab = setActiveTab;
+window.showBrowseMode = showBrowseMode;
+window.showAnalysisMode = showAnalysisMode;
+window.clearAnalysisState = clearAnalysisState;

@@ -1,43 +1,127 @@
 /*
   app.js
   ------
-  "Entry point" wiring for the frontend.
+  Frontend entry-point wiring.
 
-  - Reads the Chess.com username from the landing input.
-  - Stores the active username on window.currentUsername so other scripts can use it.
-  - Kicks off the backend request to fetch that user's monthly archives.
-
-  Note: We're using multiple script tags (no bundler), so sharing state/functions via window.*
-  is intentional for now.
+  Handles:
+  - Fetch button click
+  - Enter key / form submit
+  - Confirming before leaving analysis for a different username
 */
 
-// This is the button the user clicks after typing their username
 const fetchGamesButton = document.getElementById("fetchGamesButton");
+const usernameInput = document.getElementById("username");
+const usernameForm = document.getElementById("usernameForm");
 
-// Shared state across scripts (api.js uses this when an archive button is clicked)
+const heroSection = document.getElementById("heroSection");
+const heroUsernameInput = document.getElementById("heroUsername");
+const heroUsernameForm = document.getElementById("heroUsernameForm");
+
+const browseLayout = document.getElementById("browseLayout");
+
 window.currentUsername = "";
+window.currentUsernameDisplay = "";
+window.hasExitedHero = false;
 
-/*
-  When the user clicks "Fetch Games":
-  1) Read the username from the input box
-  2) Normalize it (trim + lowercase)
-  3) Save it to window.currentUsername for other scripts
-  4) Build the backend URL for archives
-  5) Call fetchData() (defined in api.js) to render the archive buttons
-*/
-fetchGamesButton.onclick = function handleFetchGamesClick() {
-    currentUsername = document.getElementById("username").value.trim().toLowerCase();
-    window.currentUsername = currentUsername;
+function normalizeUsername(value) {
+  return String(value || "").trim().toLowerCase();
+}
 
-    if(!currentUsername) {
-        alert("Please enter a valid username.");
-        return;
+function getDisplayUsername(value) {
+  return String(value || "").trim();
+}
+
+function isAnalysisViewOpen() {
+  const analysisLayout = document.getElementById("analysisLayout");
+  if (!analysisLayout) return false;
+  return window.getComputedStyle(analysisLayout).display !== "none";
+}
+
+function cleanBrowserURL() {
+  history.replaceState({}, "", "/");
+}
+
+function hideHeroSection() {
+  if (!heroSection || window.hasExitedHero) return;
+
+  heroSection.classList.add("hidden");
+  if (browseLayout) browseLayout.classList.remove("preHero");
+  window.hasExitedHero = true;
+}
+
+function syncInputs(rawUsername) {
+  if (usernameInput) usernameInput.value = rawUsername;
+  if (heroUsernameInput) heroUsernameInput.value = rawUsername;
+}
+
+function handleUsernameSearch(rawValue) {
+  const rawUsername = getDisplayUsername(rawValue);
+  const nextUsername = normalizeUsername(rawUsername);
+
+  if (!nextUsername) {
+    alert("Please enter a valid username.");
+    return;
+  }
+
+  const currentUsername = normalizeUsername(window.currentUsername);
+
+  if (
+    isAnalysisViewOpen() &&
+    currentUsername &&
+    nextUsername !== currentUsername
+  ) {
+    const confirmed = window.confirm(
+      "Are you sure you want to exit analysis and search for a different username?"
+    );
+
+    if (!confirmed) {
+      return;
     }
 
-    // Backend endpoint that returns the list of archive months for the user
-    // Example: /api/chesscom/jahleel/archives
-    const url = `/api/chesscom/${currentUsername}/archives`;
+    if (typeof window.clearAnalysisState === "function") {
+      window.clearAnalysisState();
+    }
 
-    // fetchData() is defined in api.js and attached to window
-    window.fetchData(url);
-};
+    if (typeof window.showBrowseMode === "function") {
+      window.showBrowseMode();
+    }
+  }
+
+  window.currentUsername = nextUsername;
+  window.currentUsernameDisplay = rawUsername;
+
+  syncInputs(rawUsername);
+  cleanBrowserURL();
+  hideHeroSection();
+
+  window._lastFetchedArchiveUrl = null;
+
+  const url = `/api/chesscom/${nextUsername}/archives`;
+  window.fetchData(url);
+}
+
+if (fetchGamesButton) {
+  fetchGamesButton.onclick = function () {
+    handleUsernameSearch(usernameInput.value);
+  };
+}
+
+if (usernameForm) {
+  usernameForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    handleUsernameSearch(usernameInput.value);
+  });
+}
+
+if (heroUsernameForm) {
+  heroUsernameForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    handleUsernameSearch(heroUsernameInput.value);
+  });
+}
+
+if (browseLayout) {
+  browseLayout.classList.add("preHero");
+}
+
+cleanBrowserURL();
