@@ -7,8 +7,10 @@ import httpx
 from pydantic import BaseModel
 import chess
 import chess.pgn
+import chess.engine
 
 app = FastAPI()
+STOCKFISH_PATH = "stockfish/stockfish-windows-x86-64-avx2/stockfish/stockfish-windows-x86-64-avx2.exe"
 
 class PGNData(BaseModel):
     pgn: str
@@ -29,6 +31,7 @@ def normalize_username(username: str) -> str:
         raise HTTPException(status_code=400, detail="Username cannot be empty.")
     return username.strip().lower()
 
+#---------------------------------------------------------------------------------------------------------------------------
 # The chess.com API endpoint for fetching archives is /pub/player/{username}/games/archives
 @app.get("/api/chesscom/{username}/archives")
 async def get_chesscom_archives(username: str):
@@ -77,7 +80,8 @@ async def get_chesscom_archives(username: str):
             status_code, "An unexpected error occurred."
         )
         raise HTTPException(status_code=status_code, detail=error_message)
-    
+
+#---------------------------------------------------------------------------------------------------------------    
 # The chess.com API endpoint for fetching games by month is /pub/player/{username}/games/{YYYY}/{MM}
 @app.get("/api/chesscom/{username}/games")
 async def get_chesscom_games(username: str, archive: str):
@@ -109,34 +113,69 @@ async def get_chesscom_games(username: str, archive: str):
             status_code = 502
         error_message = errorDictionary.get(status_code, "An unexpected error occurred.")
         raise HTTPException(status_code=status_code, detail=error_message)
+#----------------------------------------------------------------------------------------------------------------------
+# Convert engine analysis info to a simple dict format for the frontend
+def engine_info_to_dict(info):
+    score = info["score"].white()
+    pv = info.get("pv", [])
+    best_move = pv[0].uci() if pv else None
 
-# This endpoint accepts PGN data, parses it, and returns an analysis of the game.
+    if score.is_mate():
+        return {
+            "type": "mate",
+            "value": score.mate(),
+            "best_move": best_move
+        }
+
+    return {
+        "type": "cp",
+        "value": score.score(mate_score=100000),
+        "best_move": best_move
+    }
+
+# Analyze the game move by move and return evaluations for each position
 @app.post("/api/analyze")
-async def analyze_game(response: PGNData):
-    if not response.pgn or response.pgn.strip() == "":
+async def analyze_game(request: PGNData):
+    if not request.pgn or request.pgn.strip() == "":
         raise HTTPException(status_code=400, detail="PGN data cannot be empty.")
-    
-    game = chess.pgn.read_game(io.StringIO(response.pgn))
+
+    game = chess.pgn.read_game(io.StringIO(request.pgn))
     if game is None:
         raise HTTPException(status_code=400, detail="Invalid PGN format.")
-    
+
     board = game.board()
     moves = list(game.mainline_moves())
+
     moves_san = []
     fens = [board.fen()]
-    move_count = 0
-    
-    for move in moves:
-        moves_san.append(board.san(move))
-        board.push(move)
-        fens.append(board.fen())
-        move_count += 1
+    evaluations = []
 
-    analysis_result = {
+    engine = None
+
+    try:
+        engine = chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH)
+
+        # starting position eval
+        info = engine.analyse(board, chess.engine.Limit(depth=10))
+        evaluations.append(engine_info_to_dict(info))
+
+        # eval after each move
+        for move in moves:
+            moves_san.append(board.san(move))
+            board.push(move)
+            fens.append(board.fen())
+
+            info = engine.analyse(board, chess.engine.Limit(depth=10))
+            evaluations.append(engine_info_to_dict(info))
+
+    finally:
+        if engine is not None:
+            engine.quit()
+
+    return {
+        "moves": moves_san,
         "fens": fens,
-        "moves": moves_san
+        "evaluations": evaluations
     }
-    
-    return analysis_result
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

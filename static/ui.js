@@ -52,10 +52,118 @@ function updateActiveMoveHighlight() {
   cell.scrollIntoView({ block: "nearest" });
 }
 
+function formatEvalLabel(evalData) {
+  if (!evalData) return "0.0";
+
+  if (evalData.type === "mate") {
+    const sign = evalData.value > 0 ? "+" : "";
+    return `M${sign}${evalData.value}`;
+  }
+
+  const pawns = (evalData.value / 100).toFixed(1);
+  return evalData.value > 0 ? `+${pawns}` : pawns;
+}
+
+function updateEvalBar() {
+  const blackEl = document.getElementById("evalBarBlack");
+  const whiteEl = document.getElementById("evalBarWhite");
+  const labelEl = document.getElementById("evalBarLabel");
+
+  if (!blackEl || !whiteEl || !labelEl) return;
+
+  let whitePercent = 50;
+  let label = "0.0";
+
+  const evals = window.analysisResult?.evaluations;
+  const evalData = Array.isArray(evals) ? evals[window.currentMoveIndex] : null;
+
+  if (evalData) {
+    label = formatEvalLabel(evalData);
+
+    if (evalData.type === "mate") {
+      whitePercent = evalData.value > 0 ? 100 : 0;
+    } else {
+      const cp = Number(evalData.value || 0);
+      const clamped = Math.max(-600, Math.min(600, cp));
+      whitePercent = 50 + (clamped / 600) * 50;
+    }
+  }
+
+  whitePercent = Math.max(0, Math.min(100, whitePercent));
+  const blackPercent = 100 - whitePercent;
+
+  whiteEl.style.height = `${whitePercent}%`;
+  blackEl.style.height = `${blackPercent}%`;
+  labelEl.textContent = label;
+}
+
+function updateEngineInfo() {
+  const evalEl = document.getElementById("currentEvalText");
+  const bestMoveEl = document.getElementById("bestMoveText");
+
+  if (!evalEl || !bestMoveEl) {
+    updateEvalBar();
+    return;
+  }
+
+  if (!window.analysisResult || !window.analysisResult.evaluations) {
+    evalEl.innerHTML = "<strong>Eval:</strong> —";
+    bestMoveEl.innerHTML = "<strong>Best move:</strong> —";
+    updateEvalBar();
+    return;
+  }
+
+  const evalData = window.analysisResult.evaluations[window.currentMoveIndex];
+
+  if (!evalData) {
+    evalEl.innerHTML = "<strong>Eval:</strong> —";
+    bestMoveEl.innerHTML = "<strong>Best move:</strong> —";
+    updateEvalBar();
+    return;
+  }
+
+  if (evalData.type === "mate") {
+    const sign = evalData.value > 0 ? "+" : "";
+    evalEl.innerHTML = `<strong>Eval:</strong> M${sign}${evalData.value}`;
+  } else {
+    const pawns = (evalData.value / 100).toFixed(2);
+    const signed = evalData.value > 0 ? `+${pawns}` : `${pawns}`;
+    evalEl.innerHTML = `<strong>Eval:</strong> ${signed}`;
+  }
+
+  bestMoveEl.innerHTML = `<strong>Best move:</strong> ${evalData.best_move || "—"}`;
+  updateEvalBar();
+}
+
 function initialsFromName(name, fallback) {
   const value = String(name || "").trim();
   if (!value) return fallback;
   return value.slice(0, 1).toUpperCase();
+}
+
+function updateEngineInfo() {
+  const evalEl = document.getElementById("currentEvalText");
+  const bestMoveEl = document.getElementById("bestMoveText");
+
+  if (!evalEl || !bestMoveEl) return;
+  if (!window.analysisResult || !window.analysisResult.evaluations) return;
+
+  const evalData = window.analysisResult.evaluations[window.currentMoveIndex];
+  if (!evalData) {
+    evalEl.innerHTML = "<strong>Eval:</strong> —";
+    bestMoveEl.innerHTML = "<strong>Best move:</strong> —";
+    return;
+  }
+
+  if (evalData.type === "mate") {
+    evalEl.innerHTML = `<strong>Eval:</strong> Mate in ${evalData.value}`;
+  } else {
+    const pawns = (evalData.value / 100).toFixed(2);
+    const signed = evalData.value > 0 ? `+${pawns}` : `${pawns}`;
+    evalEl.innerHTML = `<strong>Eval:</strong> ${signed}`;
+  }
+
+  bestMoveEl.innerHTML = `<strong>Best move:</strong> ${evalData.best_move || "—"}`;
 }
 
 function renderBoardPlayers() {
@@ -193,6 +301,7 @@ function clearAnalysisState() {
   if (tabMoves) tabMoves.disabled = true;
 
   setActiveTab("info");
+  updateEvalBar();
 }
 
 window.initAnalysisUI = function initAnalysisUI(analysisResult) {
@@ -252,6 +361,8 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
       window.currentMoveIndex = 0;
       window.boardApi.position(window.analysisResult.fens[0], false);
       updateActiveMoveHighlight();
+      updateEngineInfo();
+      updateEvalBar();
     };
 
     prevBtn.onclick = function () {
@@ -264,6 +375,8 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
         );
       }
       updateActiveMoveHighlight();
+      updateEngineInfo();
+      updateEvalBar();
     };
 
     analyzeBtn.onclick = function () {
@@ -280,6 +393,8 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
         );
       }
       updateActiveMoveHighlight();
+      updateEngineInfo();
+      updateEvalBar();
     };
 
     lastMoveBtn.onclick = function () {
@@ -290,6 +405,8 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
         true
       );
       updateActiveMoveHighlight();
+      updateEngineInfo();
+      updateEvalBar();
     };
   }
 
@@ -353,9 +470,13 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
     window.currentMoveIndex = ply + 1;
     window.boardApi.position(analysisResult.fens[window.currentMoveIndex], true);
     updateActiveMoveHighlight();
+    updateEngineInfo();
+    updateEvalBar();
   };
 
   updateActiveMoveHighlight();
+  updateEngineInfo();
+  updateEvalBar();
 };
 
 window.setActiveTab = setActiveTab;

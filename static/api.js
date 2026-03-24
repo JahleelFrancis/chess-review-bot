@@ -237,8 +237,15 @@ window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
               <p><strong>Time Control:</strong> ${game.time_control}</p>
               <p><strong>Date:</strong> ${new Date(game.end_time * 1000).toLocaleDateString()}</p>
               <p><a href="${game.url}" target="_blank">View on Chess.com</a></p>
-              <h3>PGN:</h3>
-              <pre id="pgnBox"></pre>
+
+              <h3>Engine</h3>
+              <p id="currentEvalText"><strong>Eval:</strong> Loading...</p>
+              <p id="bestMoveText"><strong>Best move:</strong> Loading...</p>
+
+              <details class="pgnDetails">
+                <summary>Show PGN</summary>
+                <pre id="pgnBox" class="pgnBox"></pre>
+              </details>
             `;
             const pgnBox = document.getElementById("pgnBox");
             if (pgnBox) pgnBox.innerText = game.pgn;
