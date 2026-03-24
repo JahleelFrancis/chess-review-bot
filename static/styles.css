@@ -586,6 +586,7 @@ body {
   justify-content: flex-start;
   gap: var(--eval-bar-gap);
   width: calc(var(--analysis-board-size) + var(--eval-bar-wrap-width) + var(--eval-bar-gap));
+  position: relative;
 }
 
 #evalBarWrap {

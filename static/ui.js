@@ -97,42 +97,142 @@ function updateEvalBar() {
   labelEl.textContent = label;
 }
 
-function updateEngineInfo() {
-  const evalEl = document.getElementById("currentEvalText");
-  const bestMoveEl = document.getElementById("bestMoveText");
+// ARROW: Helper functions for drawing best move arrows on the board
+let arrowSvg = null;
+let currentArrowMarkerId = null;
 
-  if (!evalEl || !bestMoveEl) {
-    updateEvalBar();
+function initArrowOverlay() {
+  const boardEl = document.getElementById("board");
+  if (!boardEl) {
+    console.warn("initArrowOverlay: board element not found");
+    return null;
+  }
+
+  const container = boardEl.parentElement;
+  if (!container) return null;
+  container.style.position = "relative";
+
+  if (arrowSvg && arrowSvg.parentElement === container) {
+    return arrowSvg;
+  }
+
+  if (arrowSvg && arrowSvg.parentElement) {
+    arrowSvg.parentElement.removeChild(arrowSvg);
+  }
+
+  arrowSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  arrowSvg.style.position = "absolute";
+  arrowSvg.style.top = "0";
+  arrowSvg.style.left = "0";
+  arrowSvg.style.width = "100%";
+  arrowSvg.style.height = "100%";
+  arrowSvg.style.pointerEvents = "none";
+  arrowSvg.style.zIndex = "10"; // ensure it's above board
+  container.appendChild(arrowSvg);
+
+  console.log("Arrow overlay created");
+  return arrowSvg;
+}
+
+function clearArrows() {
+  if (!arrowSvg) return;
+  while (arrowSvg.firstChild) {
+    arrowSvg.removeChild(arrowSvg.firstChild);
+  }
+  currentArrowMarkerId = null;
+  console.log("Arrows cleared");
+}
+
+function drawArrow(fromSquare, toSquare, color = "#ffaa44") {
+  console.log(`drawArrow called: ${fromSquare} → ${toSquare}`);
+  const svg = initArrowOverlay();
+  if (!svg) {
+    console.warn("drawArrow: no SVG overlay");
     return;
   }
 
-  if (!window.analysisResult || !window.analysisResult.evaluations) {
-    evalEl.innerHTML = "<strong>Eval:</strong> —";
-    bestMoveEl.innerHTML = "<strong>Best move:</strong> —";
-    updateEvalBar();
+  clearArrows();
+
+  const boardEl = document.getElementById("board");
+  const container = boardEl.parentElement;
+  const boardRect = boardEl.getBoundingClientRect();
+  const containerRect = container.getBoundingClientRect();
+  const boardWidth = boardRect.width;
+  const boardHeight = boardRect.height;
+  console.log(`Board size: ${boardWidth}x${boardHeight}`);
+
+  if (boardWidth === 0 || boardHeight === 0) {
+    console.warn("Board has zero size, retrying in 100ms");
+    setTimeout(() => drawArrow(fromSquare, toSquare, color), 100);
     return;
   }
 
-  const evalData = window.analysisResult.evaluations[window.currentMoveIndex];
+  const squareSize = boardWidth / 8;
+  const boardLeft = boardRect.left - containerRect.left;
+  const boardTop = boardRect.top - containerRect.top;
 
-  if (!evalData) {
-    evalEl.innerHTML = "<strong>Eval:</strong> —";
-    bestMoveEl.innerHTML = "<strong>Best move:</strong> —";
-    updateEvalBar();
+  function squareToCoords(sq) {
+    const file = sq.charCodeAt(0) - 97;
+    const rank = parseInt(sq[1]) - 1;
+    const x = boardLeft + file * squareSize + squareSize / 2;
+    const y = boardTop + (7 - rank) * squareSize + squareSize / 2;
+    return { x, y };
+  }
+
+  const from = squareToCoords(fromSquare);
+  const to = squareToCoords(toSquare);
+  console.log(`Coordinates: from(${from.x},${from.y}) to(${to.x},${to.y})`);
+
+  let defs = svg.querySelector("defs");
+  if (!defs) {
+    defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+    svg.appendChild(defs);
+  }
+
+  const markerId = `arrow-${Date.now()}-${Math.random()}`;
+  currentArrowMarkerId = markerId;
+
+  const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
+  marker.setAttribute("id", markerId);
+  marker.setAttribute("markerWidth", "8");
+  marker.setAttribute("markerHeight", "8");
+  marker.setAttribute("refX", "7");
+  marker.setAttribute("refY", "4");
+  marker.setAttribute("orient", "auto");
+  const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+  polygon.setAttribute("points", "0 0, 8 4, 0 8");
+  polygon.setAttribute("fill", color);
+  marker.appendChild(polygon);
+  defs.appendChild(marker);
+
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", from.x);
+  line.setAttribute("y1", from.y);
+  line.setAttribute("x2", to.x);
+  line.setAttribute("y2", to.y);
+  line.setAttribute("stroke", color);
+  line.setAttribute("stroke-width", "3");
+  line.setAttribute("stroke-linecap", "round");
+  line.setAttribute("opacity", "0.8");
+  line.setAttribute("marker-end", `url(#${markerId})`);
+  svg.appendChild(line);
+  console.log("Arrow drawn");
+}
+
+function drawBestMoveArrow() {
+  console.log("drawBestMoveArrow called");
+  const evalData = window.analysisResult?.evaluations[window.currentMoveIndex];
+  if (!evalData || !evalData.best_move) {
+    console.log("No best move, clearing arrows");
+    clearArrows();
     return;
   }
 
-  if (evalData.type === "mate") {
-    const sign = evalData.value > 0 ? "+" : "";
-    evalEl.innerHTML = `<strong>Eval:</strong> M${sign}${evalData.value}`;
-  } else {
-    const pawns = (evalData.value / 100).toFixed(2);
-    const signed = evalData.value > 0 ? `+${pawns}` : `${pawns}`;
-    evalEl.innerHTML = `<strong>Eval:</strong> ${signed}`;
-  }
-
-  bestMoveEl.innerHTML = `<strong>Best move:</strong> ${evalData.best_move || "—"}`;
-  updateEvalBar();
+  const bestMove = evalData.best_move;
+  if (bestMove.length < 4) return;
+  const from = bestMove.slice(0, 2);
+  const to = bestMove.slice(2, 4);
+  drawArrow(from, to);
 }
 
 function initialsFromName(name, fallback) {
@@ -141,17 +241,31 @@ function initialsFromName(name, fallback) {
   return value.slice(0, 1).toUpperCase();
 }
 
+// ARROW: Combined duplicate function and added arrow drawing
 function updateEngineInfo() {
   const evalEl = document.getElementById("currentEvalText");
   const bestMoveEl = document.getElementById("bestMoveText");
 
-  if (!evalEl || !bestMoveEl) return;
-  if (!window.analysisResult || !window.analysisResult.evaluations) return;
+  if (!evalEl || !bestMoveEl) {
+    updateEvalBar();
+    drawBestMoveArrow(); // ARROW: also update arrow
+    return;
+  }
+
+  if (!window.analysisResult || !window.analysisResult.evaluations) {
+    evalEl.innerHTML = "<strong>Eval:</strong> —";
+    bestMoveEl.innerHTML = "<strong>Best move:</strong> —";
+    updateEvalBar();
+    drawBestMoveArrow(); // ARROW: clear arrow
+    return;
+  }
 
   const evalData = window.analysisResult.evaluations[window.currentMoveIndex];
   if (!evalData) {
     evalEl.innerHTML = "<strong>Eval:</strong> —";
     bestMoveEl.innerHTML = "<strong>Best move:</strong> —";
+    updateEvalBar();
+    drawBestMoveArrow(); // ARROW: clear arrow
     return;
   }
 
@@ -164,7 +278,10 @@ function updateEngineInfo() {
   }
 
   bestMoveEl.innerHTML = `<strong>Best move:</strong> ${evalData.best_move || "—"}`;
+  updateEvalBar();
+  drawBestMoveArrow(); // ARROW: draw arrow for best move
 }
+// ARROW: End
 
 function renderBoardPlayers() {
   const topName = document.getElementById("boardPlayerTopName");
@@ -302,6 +419,7 @@ function clearAnalysisState() {
 
   setActiveTab("info");
   updateEvalBar();
+  clearArrows(); // ARROW: clear any remaining arrows
 }
 
 window.initAnalysisUI = function initAnalysisUI(analysisResult) {
@@ -329,6 +447,14 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
       pieceTheme: "/img/chesspieces/wikipedia/{piece}.png",
       draggable: false,
     });
+  }
+
+  // ARROW: Add resize listener to redraw arrows on window resize
+  if (!window._arrowResizeListenerAdded) {
+    window.addEventListener("resize", function() {
+      drawBestMoveArrow();
+    });
+    window._arrowResizeListenerAdded = true;
   }
 
   const controls = document.getElementById("analysisControls");
@@ -380,7 +506,7 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
     };
 
     analyzeBtn.onclick = function () {
-      alert("Stockfish analysis coming soon 🙂");
+      alert("Stockfish analysis coming soon!");
     };
 
     nextBtn.onclick = function () {
