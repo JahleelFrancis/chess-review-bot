@@ -97,7 +97,7 @@ function updateEvalBar() {
   labelEl.textContent = label;
 }
 
-// ARROW: Helper functions for drawing best move arrows on the board
+// Arrow helpers
 let arrowSvg = null;
 let currentArrowMarkerId = null;
 
@@ -127,7 +127,7 @@ function initArrowOverlay() {
   arrowSvg.style.width = "100%";
   arrowSvg.style.height = "100%";
   arrowSvg.style.pointerEvents = "none";
-  arrowSvg.style.zIndex = "10"; // ensure it's above board
+  arrowSvg.style.zIndex = "10";
   container.appendChild(arrowSvg);
 
   console.log("Arrow overlay created");
@@ -241,14 +241,13 @@ function initialsFromName(name, fallback) {
   return value.slice(0, 1).toUpperCase();
 }
 
-// ARROW: Combined duplicate function and added arrow drawing
 function updateEngineInfo() {
   const evalEl = document.getElementById("currentEvalText");
   const bestMoveEl = document.getElementById("bestMoveText");
 
   if (!evalEl || !bestMoveEl) {
     updateEvalBar();
-    drawBestMoveArrow(); // ARROW: also update arrow
+    drawBestMoveArrow();
     return;
   }
 
@@ -256,7 +255,7 @@ function updateEngineInfo() {
     evalEl.innerHTML = "<strong>Eval:</strong> —";
     bestMoveEl.innerHTML = "<strong>Best move:</strong> —";
     updateEvalBar();
-    drawBestMoveArrow(); // ARROW: clear arrow
+    drawBestMoveArrow();
     return;
   }
 
@@ -265,7 +264,7 @@ function updateEngineInfo() {
     evalEl.innerHTML = "<strong>Eval:</strong> —";
     bestMoveEl.innerHTML = "<strong>Best move:</strong> —";
     updateEvalBar();
-    drawBestMoveArrow(); // ARROW: clear arrow
+    drawBestMoveArrow();
     return;
   }
 
@@ -279,9 +278,8 @@ function updateEngineInfo() {
 
   bestMoveEl.innerHTML = `<strong>Best move:</strong> ${evalData.best_move || "—"}`;
   updateEvalBar();
-  drawBestMoveArrow(); // ARROW: draw arrow for best move
+  drawBestMoveArrow();
 }
-// ARROW: End
 
 function renderBoardPlayers() {
   const topName = document.getElementById("boardPlayerTopName");
@@ -419,12 +417,79 @@ function clearAnalysisState() {
 
   setActiveTab("info");
   updateEvalBar();
-  clearArrows(); // ARROW: clear any remaining arrows
+  clearArrows();
+}
+
+function createControlButtons() {
+  const controls = document.getElementById("analysisControls");
+  if (!controls || controls.children.length > 0) return; // already created
+
+  const resetBtn = document.createElement("button");
+  resetBtn.innerText = "<<";
+  const prevBtn = document.createElement("button");
+  prevBtn.innerText = "<";
+  const nextBtn = document.createElement("button");
+  nextBtn.innerText = ">";
+  const lastMoveBtn = document.createElement("button");
+  lastMoveBtn.innerText = ">>";
+
+  controls.appendChild(resetBtn);
+  controls.appendChild(prevBtn);
+  controls.appendChild(nextBtn);
+  controls.appendChild(lastMoveBtn);
+
+  resetBtn.onclick = function () {
+    if (!window.analysisResult) return;
+    window.currentMoveIndex = 0;
+    window.boardApi.position(window.analysisResult.fens[0], false);
+    updateActiveMoveHighlight();
+    updateEngineInfo();
+    updateEvalBar();
+  };
+
+  prevBtn.onclick = function () {
+    if (!window.analysisResult) return;
+    if (window.currentMoveIndex > 0) {
+      window.currentMoveIndex--;
+      window.boardApi.position(
+        window.analysisResult.fens[window.currentMoveIndex],
+        true
+      );
+    }
+    updateActiveMoveHighlight();
+    updateEngineInfo();
+    updateEvalBar();
+  };
+
+  nextBtn.onclick = function () {
+    if (!window.analysisResult) return;
+    if (window.currentMoveIndex < window.maxIndex) {
+      window.currentMoveIndex++;
+      window.boardApi.position(
+        window.analysisResult.fens[window.currentMoveIndex],
+        true
+      );
+    }
+    updateActiveMoveHighlight();
+    updateEngineInfo();
+    updateEvalBar();
+  };
+
+  lastMoveBtn.onclick = function () {
+    if (!window.analysisResult) return;
+    window.currentMoveIndex = window.maxIndex;
+    window.boardApi.position(
+      window.analysisResult.fens[window.currentMoveIndex],
+      true
+    );
+    updateActiveMoveHighlight();
+    updateEngineInfo();
+    updateEvalBar();
+  };
 }
 
 window.initAnalysisUI = function initAnalysisUI(analysisResult) {
   ensureTabsInitialized();
-  showAnalysisMode();
   renderBoardPlayers();
 
   const tabMoves = document.getElementById("tabMoves");
@@ -449,156 +514,66 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
     });
   }
 
-  // ARROW: Add resize listener to redraw arrows on window resize
-  if (!window._arrowResizeListenerAdded) {
-    window.addEventListener("resize", function() {
-      drawBestMoveArrow();
-    });
-    window._arrowResizeListenerAdded = true;
-  }
-
-  const controls = document.getElementById("analysisControls");
-  if (controls) {
-    controls.innerHTML = "";
-
-    const resetBtn = document.createElement("button");
-    resetBtn.innerText = "<<";
-
-    const prevBtn = document.createElement("button");
-    prevBtn.innerText = "<";
-
-    const analyzeBtn = document.createElement("button");
-    analyzeBtn.innerText = "Analyze";
-
-    const nextBtn = document.createElement("button");
-    nextBtn.innerText = ">";
-
-    const lastMoveBtn = document.createElement("button");
-    lastMoveBtn.innerText = ">>";
-
-    controls.appendChild(resetBtn);
-    controls.appendChild(prevBtn);
-    controls.appendChild(analyzeBtn);
-    controls.appendChild(nextBtn);
-    controls.appendChild(lastMoveBtn);
-
-    resetBtn.onclick = function () {
-      if (!window.analysisResult) return;
-      window.currentMoveIndex = 0;
-      window.boardApi.position(window.analysisResult.fens[0], false);
-      updateActiveMoveHighlight();
-      updateEngineInfo();
-      updateEvalBar();
-    };
-
-    prevBtn.onclick = function () {
-      if (!window.analysisResult) return;
-      if (window.currentMoveIndex > 0) {
-        window.currentMoveIndex--;
-        window.boardApi.position(
-          window.analysisResult.fens[window.currentMoveIndex],
-          true
-        );
-      }
-      updateActiveMoveHighlight();
-      updateEngineInfo();
-      updateEvalBar();
-    };
-
-    analyzeBtn.onclick = function () {
-      alert("Stockfish analysis coming soon!");
-    };
-
-    nextBtn.onclick = function () {
-      if (!window.analysisResult) return;
-      if (window.currentMoveIndex < window.maxIndex) {
-        window.currentMoveIndex++;
-        window.boardApi.position(
-          window.analysisResult.fens[window.currentMoveIndex],
-          true
-        );
-      }
-      updateActiveMoveHighlight();
-      updateEngineInfo();
-      updateEvalBar();
-    };
-
-    lastMoveBtn.onclick = function () {
-      if (!window.analysisResult) return;
-      window.currentMoveIndex = window.maxIndex;
-      window.boardApi.position(
-        window.analysisResult.fens[window.currentMoveIndex],
-        true
-      );
-      updateActiveMoveHighlight();
-      updateEngineInfo();
-      updateEvalBar();
-    };
-  }
-
   window.analysisResult = analysisResult;
   window.currentMoveIndex = 0;
   window.maxIndex = analysisResult.fens.length - 1;
 
   window.boardApi.position(analysisResult.fens[0], false);
 
+  // Build move list
   const moveListDiv = document.getElementById("moveList");
-  if (!moveListDiv) return;
+  if (moveListDiv) {
+    moveListDiv.innerHTML = "";
+    const table = document.createElement("table");
+    table.className = "move-table";
+    const moves = analysisResult.moves || [];
 
-  moveListDiv.innerHTML = "";
+    for (let ply = 0; ply < moves.length; ply += 2) {
+      const moveNumber = ply / 2 + 1;
+      const whiteMove = moves[ply];
+      const blackMove = moves[ply + 1];
 
-  const table = document.createElement("table");
-  table.className = "move-table";
+      const tr = document.createElement("tr");
+      tr.className = "animatedRow";
+      tr.style.animationDelay = `${Math.min(ply, 10) * 14}ms`;
 
-  const moves = analysisResult.moves || [];
+      const tdNum = document.createElement("td");
+      tdNum.className = "move-num";
+      tdNum.innerText = moveNumber + ".";
+      tr.appendChild(tdNum);
 
-  for (let ply = 0; ply < moves.length; ply += 2) {
-    const moveNumber = ply / 2 + 1;
-    const whiteMove = moves[ply];
-    const blackMove = moves[ply + 1];
+      const tdWhite = document.createElement("td");
+      tdWhite.className = "move-cell";
+      tdWhite.innerText = whiteMove ?? "";
+      tdWhite.dataset.ply = String(ply);
+      tr.appendChild(tdWhite);
 
-    const tr = document.createElement("tr");
-    tr.className = "animatedRow";
-    tr.style.animationDelay = `${Math.min(ply, 10) * 14}ms`;
+      const tdBlack = document.createElement("td");
+      tdBlack.className = "move-cell";
+      tdBlack.innerText = blackMove ?? "";
+      if (blackMove != null) tdBlack.dataset.ply = String(ply + 1);
+      tr.appendChild(tdBlack);
 
-    const tdNum = document.createElement("td");
-    tdNum.className = "move-num";
-    tdNum.innerText = moveNumber + ".";
-    tr.appendChild(tdNum);
+      table.appendChild(tr);
+    }
+    moveListDiv.appendChild(table);
 
-    const tdWhite = document.createElement("td");
-    tdWhite.className = "move-cell";
-    tdWhite.innerText = whiteMove ?? "";
-    tdWhite.dataset.ply = String(ply);
-    tr.appendChild(tdWhite);
-
-    const tdBlack = document.createElement("td");
-    tdBlack.className = "move-cell";
-    tdBlack.innerText = blackMove ?? "";
-    if (blackMove != null) tdBlack.dataset.ply = String(ply + 1);
-    tr.appendChild(tdBlack);
-
-    table.appendChild(tr);
+    moveListDiv.onclick = function (e) {
+      const cell = e.target.closest(".move-cell");
+      if (!cell) return;
+      const plyStr = cell.dataset.ply;
+      if (!plyStr) return;
+      const ply = Number(plyStr);
+      if (!Number.isFinite(ply)) return;
+      window.currentMoveIndex = ply + 1;
+      window.boardApi.position(analysisResult.fens[window.currentMoveIndex], true);
+      updateActiveMoveHighlight();
+      updateEngineInfo();
+      updateEvalBar();
+    };
   }
 
-  moveListDiv.appendChild(table);
-
-  moveListDiv.onclick = function (e) {
-    const cell = e.target.closest(".move-cell");
-    if (!cell) return;
-
-    const plyStr = cell.dataset.ply;
-    if (!plyStr) return;
-
-    const ply = Number(plyStr);
-    if (!Number.isFinite(ply)) return;
-
-    window.currentMoveIndex = ply + 1;
-    window.boardApi.position(analysisResult.fens[window.currentMoveIndex], true);
-    updateActiveMoveHighlight();
-    updateEngineInfo();
-    updateEvalBar();
-  };
+  createControlButtons();
 
   updateActiveMoveHighlight();
   updateEngineInfo();

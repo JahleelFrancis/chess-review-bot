@@ -74,6 +74,29 @@ function updateGamesHeader(archive) {
   }
 }
 
+// Helper to format time control
+function formatTimeControl(tc) {
+  if (!tc) return "Unknown";
+  // Simple seconds (e.g., "600")
+  if (/^\d+$/.test(tc)) {
+    const seconds = parseInt(tc, 10);
+    const minutes = seconds / 60;
+    return `${minutes} min`;
+  }
+  // Base + increment (e.g., "180+2")
+  const match = tc.match(/^(\d+)(?:\+(\d+))?$/);
+  if (match) {
+    const base = parseInt(match[1], 10);
+    const inc = match[2] ? parseInt(match[2], 10) : 0;
+    const minutes = base / 60;
+    let formatted = `${minutes}`;
+    if (inc) formatted += ` + ${inc}`;
+    return formatted;
+  }
+  // Fallback
+  return tc;
+}
+
 window.fetchData = async function fetchData(url, options = {}) {
   if (window._lastFetchedArchiveUrl === url) return;
 
@@ -106,13 +129,12 @@ window.fetchData = async function fetchData(url, options = {}) {
     archivesDiv.innerHTML = `
       <table class="dataTable">
         <thead>
-          <tr>
             <th>Month</th>
             <th>Games</th>
           </tr>
         </thead>
         <tbody id="archivesTableBody"></tbody>
-      </table>
+       </table>
     `;
 
     const tbody = document.getElementById("archivesTableBody");
@@ -201,23 +223,34 @@ window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
     const tbody = document.getElementById("gamesTableBody");
     tbody.innerHTML = "";
 
-    data.games.forEach((game) => {
-      let outcome = "Draw";
-      if (game.white.result === "win") outcome = "White Wins";
-      else if (game.black.result === "win") outcome = "Black Wins";
+    // Reverse games so newest appear at the top
+    const reversedGames = [...data.games].reverse();
+
+    reversedGames.forEach((game) => {
+      // Determine result from the perspective of the searched username
+      const searchedUsername = window.currentUsernameDisplay || window.currentUsername;
+      let resultText = "Draw";
+      if (game.white.username.toLowerCase() === searchedUsername.toLowerCase()) {
+        if (game.white.result === "win") resultText = "Win";
+        else if (game.black.result === "win") resultText = "Loss";
+      } else if (game.black.username.toLowerCase() === searchedUsername.toLowerCase()) {
+        if (game.black.result === "win") resultText = "Win";
+        else if (game.white.result === "win") resultText = "Loss";
+      }
+
+      const formattedTimeControl = formatTimeControl(game.time_control);
 
       const tr = document.createElement("tr");
       tr.className = "dataRow";
 
       tr.innerHTML = `
         <td>${game.white.username} vs ${game.black.username}</td>
-        <td>${outcome}</td>
-        <td class="muted">${game.time_control}</td>
+        <td>${resultText}</td>
+        <td class="muted">${formattedTimeControl}</td>
       `;
 
       tr.onclick = async () => {
-        window.beginLoading("Loading analysis...");
-
+        window.beginLoading("Loading game...");
         try {
           window.selectedGamePGN = game.pgn;
           window.currentGameMeta = {
@@ -225,16 +258,21 @@ window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
             whiteRating: game.white.rating,
             blackUsername: game.black.username,
             blackRating: game.black.rating,
+            outcome: resultText,
+            timeControl: formattedTimeControl,
+            date: new Date(game.end_time * 1000).toLocaleDateString(),
+            url: game.url,
           };
 
+          // Fill Info tab (metadata and PGN)
           const analysisDiv = document.getElementById("analysis");
           if (analysisDiv) {
             analysisDiv.innerHTML = `
               <h3>Game Analysis</h3>
               <p><strong>White:</strong> ${game.white.username} (${game.white.rating})</p>
               <p><strong>Black:</strong> ${game.black.username} (${game.black.rating})</p>
-              <p><strong>Result:</strong> ${outcome}</p>
-              <p><strong>Time Control:</strong> ${game.time_control}</p>
+              <p><strong>Result:</strong> ${resultText}</p>
+              <p><strong>Time Control:</strong> ${formattedTimeControl}</p>
               <p><strong>Date:</strong> ${new Date(game.end_time * 1000).toLocaleDateString()}</p>
               <p><a href="${game.url}" target="_blank">View on Chess.com</a></p>
 
@@ -251,24 +289,25 @@ window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
             if (pgnBox) pgnBox.innerText = game.pgn;
           }
 
-          if (window.setActiveTab) window.setActiveTab("info");
-          await yieldNextFrame();
-
-          const result = await analyzeGameFromPGN(window.selectedGamePGN);
-          if (!result) {
-            alert("Failed to load game. Please try again.");
-            return;
+          // Switch to analysis view immediately
+          if (typeof window.showAnalysisMode === "function") {
+            window.showAnalysisMode();
           }
 
-          if (typeof window.initAnalysisUI === "function") {
+          // Run analysis
+          const result = await window.postData({ pgn: game.pgn });
+          if (result && typeof window.initAnalysisUI === "function") {
             window.initAnalysisUI(result);
+          } else {
+            alert("Failed to analyze game.");
           }
 
+          // Push history state
           if (typeof window.pushAnalysisHistory === "function") {
             window.pushAnalysisHistory();
           }
         } catch (err) {
-          console.error("Error loading game analysis:", err);
+          console.error("Error loading game:", err);
           alert("An error occurred while loading the game.");
         } finally {
           window.endLoading();
