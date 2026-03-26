@@ -221,18 +221,313 @@ function drawArrow(fromSquare, toSquare, color = "#ffaa44") {
 
 function drawBestMoveArrow() {
   console.log("drawBestMoveArrow called");
-  const evalData = window.analysisResult?.evaluations[window.currentMoveIndex];
-  if (!evalData || !evalData.best_move) {
-    console.log("No best move, clearing arrows");
-    clearArrows();
-    return;
+
+  const moveIndex = window.currentMoveIndex - 1;
+  // Only show arrow if the move that led to this position was a mistake (quality not null)
+  if (moveIndex >= 0 && window.moveQualities && window.moveQualities[moveIndex] !== null) {
+    const evalData = window.analysisResult?.evaluations[window.currentMoveIndex];
+    if (evalData && evalData.best_move) {
+      const bestMove = evalData.best_move;
+      if (bestMove.length >= 4) {
+        const from = bestMove.slice(0, 2);
+        const to = bestMove.slice(2, 4);
+        drawArrow(from, to);
+        return;
+      }
+    }
   }
 
-  const bestMove = evalData.best_move;
-  if (bestMove.length < 4) return;
-  const from = bestMove.slice(0, 2);
-  const to = bestMove.slice(2, 4);
-  drawArrow(from, to);
+  clearArrows();
+}
+
+// Compute move qualities (blunder, mistake, inaccuracy) based on evaluation drop
+function computeMoveQualities(evaluations, moves) {
+  if (!evaluations || moves.length === 0) return [];
+
+  const qualities = [];
+
+  for (let i = 0; i < moves.length; i++) {
+    const beforeEval = evaluations[i];
+    const afterEval = evaluations[i + 1];
+    if (!beforeEval || !afterEval) {
+      qualities.push(null);
+      continue;
+    }
+
+    function getCentipawns(e) {
+      if (e.type === "mate") {
+        return e.value > 0 ? 10000 : -10000;
+      }
+      return e.value;
+    }
+
+    const beforeCp = getCentipawns(beforeEval);
+    const afterCp = getCentipawns(afterEval);
+
+    const isWhiteMove = (i % 2 === 0);
+    let drop;
+    if (isWhiteMove) {
+      drop = beforeCp - afterCp;
+    } else {
+      drop = afterCp - beforeCp;
+    }
+
+    const absDrop = Math.abs(drop);
+    let severity = null;
+    if (absDrop > 120) {
+      severity = "blunder";
+    } else if (absDrop > 50) {
+      severity = "mistake";
+    } else if (absDrop > 30) {
+      severity = "inaccuracy";
+    }
+
+    qualities.push(severity);
+  }
+  return qualities;
+}
+
+// Convert UCI move to human-readable description
+function describeMove(uci, fen) {
+  if (!uci) return "??";
+
+  // Try to use chess.js
+  if (typeof Chess !== "undefined") {
+    try {
+      const board = new Chess(fen);
+      const move = board.move(uci, { sloppy: true });
+      if (move) {
+        // Castling
+        if (move.san === "O-O" || move.san === "O-O-O") {
+          return move.san === "O-O" ? "castling kingside" : "castling queenside";
+        }
+
+        const pieceName = move.piece === 'p' ? 'pawn' :
+                          move.piece === 'n' ? 'knight' :
+                          move.piece === 'b' ? 'bishop' :
+                          move.piece === 'r' ? 'rook' :
+                          move.piece === 'q' ? 'queen' : 'king';
+        const toSquare = move.to.toUpperCase();
+
+        if (move.promotion) {
+          const promo = move.promotion === 'q' ? 'queen' :
+                        move.promotion === 'r' ? 'rook' :
+                        move.promotion === 'b' ? 'bishop' : 'knight';
+          return `promoting your pawn to a ${promo}`;
+        }
+
+        if (move.captured) {
+          const capturedName = move.captured === 'p' ? 'pawn' :
+                               move.captured === 'n' ? 'knight' :
+                               move.captured === 'b' ? 'bishop' :
+                               move.captured === 'r' ? 'rook' :
+                               move.captured === 'q' ? 'queen' : '';
+          return `capturing the ${capturedName} on ${toSquare} with your ${pieceName}`;
+        }
+
+        return `moving your ${pieceName} to ${toSquare}`;
+      }
+    } catch (e) {
+      console.warn("chess.js describeMove error", e);
+    }
+  }
+
+  // Fallback: manual parsing using chess.js to get piece if available
+  if (typeof Chess !== "undefined") {
+    try {
+      const board = new Chess(fen);
+      const from = uci.slice(0, 2);
+      const to = uci.slice(2, 4);
+      const piece = board.get(from);
+      if (piece) {
+        const pieceName = piece.type === 'p' ? 'pawn' :
+                          piece.type === 'n' ? 'knight' :
+                          piece.type === 'b' ? 'bishop' :
+                          piece.type === 'r' ? 'rook' :
+                          piece.type === 'q' ? 'queen' : 'king';
+        const toSquare = to.toUpperCase();
+
+        // Check if it's a capture by seeing if the destination square has an enemy piece
+        const targetPiece = board.get(to);
+        if (targetPiece && targetPiece.color !== piece.color) {
+          const capturedName = targetPiece.type === 'p' ? 'pawn' :
+                               targetPiece.type === 'n' ? 'knight' :
+                               targetPiece.type === 'b' ? 'bishop' :
+                               targetPiece.type === 'r' ? 'rook' :
+                               targetPiece.type === 'q' ? 'queen' : '';
+          return `capturing the ${capturedName} on ${toSquare} with your ${pieceName}`;
+        }
+        return `moving your ${pieceName} to ${toSquare}`;
+      }
+    } catch (e) {
+      console.warn("manual parse error", e);
+    }
+  }
+
+  // Last resort: just show UCI
+  return uci;
+}
+
+// Tactical description of the best move (extra info)
+function getTacticalDescription(bestMoveUci, beforeFen) {
+  if (!bestMoveUci || typeof Chess === "undefined") return "";
+
+  try {
+    const board = new Chess(beforeFen);
+    const move = board.move(bestMoveUci);
+    if (!move) return "";
+
+    let description = "";
+
+    if (board.in_check()) {
+      description += "delivers check";
+    }
+
+    if (move.captured) {
+      const pieceName = move.captured === 'p' ? 'pawn' :
+                        move.captured === 'n' ? 'knight' :
+                        move.captured === 'b' ? 'bishop' :
+                        move.captured === 'r' ? 'rook' :
+                        move.captured === 'q' ? 'queen' : '';
+      if (description) description += " and ";
+      description += `captures a ${pieceName}`;
+    }
+
+    // Simple fork detection (attacks two or more enemy pieces)
+    const afterBoard = new Chess(beforeFen);
+    afterBoard.move(bestMoveUci);
+    const movedPieceSquare = move.to;
+    const boardState = afterBoard.board();
+    const enemySquares = [];
+    for (let i = 0; i < 8; i++) {
+      for (let j = 0; j < 8; j++) {
+        const piece = boardState[i][j];
+        if (piece && piece.color !== afterBoard.turn()) {
+          enemySquares.push(algebraicFromCoords(j, i));
+        }
+      }
+    }
+    let attackedPieces = [];
+    for (const enemySquare of enemySquares) {
+      const testBoard = new Chess(beforeFen);
+      testBoard.move(bestMoveUci);
+      const moves = testBoard.moves({ verbose: true });
+      const isAttack = moves.some(m => m.from === movedPieceSquare && m.to === enemySquare && m.captured);
+      if (isAttack) {
+        attackedPieces.push(testBoard.get(enemySquare).type);
+      }
+    }
+    if (attackedPieces.length >= 2) {
+      const pieces = attackedPieces.map(p => p === 'p' ? 'pawn' : p === 'n' ? 'knight' : p === 'b' ? 'bishop' : p === 'r' ? 'rook' : p === 'q' ? 'queen' : '').join(' and ');
+      if (description) description += " and ";
+      description += `forks the ${pieces}`;
+    }
+
+    if (afterBoard.in_checkmate()) {
+      description = "delivers checkmate";
+    }
+
+    if (!description) {
+      description = "improves your position";
+    }
+
+    return description;
+  } catch (e) {
+    console.warn("Tactical description failed", e);
+    return "";
+  }
+}
+
+function algebraicFromCoords(file, rank) {
+  const files = 'abcdefgh';
+  const ranks = '87654321';
+  return files[file] + ranks[rank];
+}
+
+function getUserColor() {
+  const meta = window.currentGameMeta;
+  if (!meta) return null;
+  const searchedUser = (window.currentUsernameDisplay || window.currentUsername || "").toLowerCase();
+  if (meta.whiteUsername.toLowerCase() === searchedUser) return "white";
+  if (meta.blackUsername.toLowerCase() === searchedUser) return "black";
+  return null;
+}
+
+function getMoverPerspective(moveIndex) {
+  const userColor = getUserColor();
+  if (!userColor) return null;
+  const isWhiteMove = (moveIndex % 2 === 0);
+  if ((isWhiteMove && userColor === "white") || (!isWhiteMove && userColor === "black")) {
+    return "user";
+  } else {
+    return "opponent";
+  }
+}
+
+// Generate insight text with natural language best move description
+function getInsightsText(quality, moveSan, bestMoveUci, beforeFen, moveIndex) {
+  const bestMoveDesc = describeMove(bestMoveUci, beforeFen);
+  const tactical = getTacticalDescription(bestMoveUci, beforeFen);
+  const tacticalPhrase = tactical ? `, which ${tactical}` : "";
+  const mover = getMoverPerspective(moveIndex);
+  const isUser = (mover === "user");
+
+  if (!quality) {
+    if (isUser) {
+      return `✅ Good move. Keeps the position steady.`;
+    } else {
+      return `✅ Opponent played a solid move.`;
+    }
+  }
+
+  let message = "";
+  if (isUser) {
+    if (quality === "blunder") {
+      message = `⚠️ You blundered! ${moveSan} was a critical error. The best move was ${bestMoveDesc}${tacticalPhrase}.`;
+    } else if (quality === "mistake") {
+      message = `❗ You made a mistake. ${moveSan} is not optimal. Consider ${bestMoveDesc} instead${tacticalPhrase}.`;
+    } else if (quality === "inaccuracy") {
+      message = `❓ You played an inaccuracy. ${moveSan} misses a better option. ${bestMoveDesc} would have been stronger${tacticalPhrase}.`;
+    }
+  } else {
+    if (quality === "blunder") {
+      message = `🎯 Opponent blundered! ${moveSan} was a critical error. The best move was ${bestMoveDesc}${tacticalPhrase}.`;
+    } else if (quality === "mistake") {
+      message = `❗ Opponent made a mistake. ${moveSan} is not optimal. They should have played ${bestMoveDesc}${tacticalPhrase}.`;
+    } else if (quality === "inaccuracy") {
+      message = `❓ Opponent played an inaccuracy. ${moveSan} misses a better option. ${bestMoveDesc} would have been stronger${tacticalPhrase}.`;
+    }
+  }
+  return message;
+}
+
+function updateInsights() {
+  const insightsDiv = document.getElementById("insightsContent");
+  if (!insightsDiv) return;
+
+  const moveIndex = window.currentMoveIndex - 1;
+  if (moveIndex >= 0 && window.moveQualities && window.moveQualities[moveIndex]) {
+    const quality = window.moveQualities[moveIndex];
+    const moveSan = window.analysisResult.moves[moveIndex];
+    const bestMoveUci = window.analysisResult.evaluations[window.currentMoveIndex]?.best_move;
+    const beforeFen = window.analysisResult.fens[moveIndex];
+    const insightText = getInsightsText(quality, moveSan, bestMoveUci, beforeFen, moveIndex);
+    insightsDiv.innerHTML = `<div class="insight-text">${insightText}</div>`;
+  } else {
+    const moveIndex = window.currentMoveIndex - 1;
+    if (moveIndex >= 0) {
+      const mover = getMoverPerspective(moveIndex);
+      if (mover === "user") {
+        insightsDiv.innerHTML = `<div class="insight-text">✅ Good move. Keeps the position steady.</div>`;
+      } else if (mover === "opponent") {
+        insightsDiv.innerHTML = `<div class="insight-text">✅ Opponent played a solid move.</div>`;
+      } else {
+        insightsDiv.innerHTML = `<div class="insight-text">No significant issues with this move.</div>`;
+      }
+    } else {
+      insightsDiv.innerHTML = `<div class="insight-text">Select a move to see insights.</div>`;
+    }
+  }
 }
 
 function initialsFromName(name, fallback) {
@@ -248,6 +543,7 @@ function updateEngineInfo() {
   if (!evalEl || !bestMoveEl) {
     updateEvalBar();
     drawBestMoveArrow();
+    updateInsights();
     return;
   }
 
@@ -256,6 +552,7 @@ function updateEngineInfo() {
     bestMoveEl.innerHTML = "<strong>Best move:</strong> —";
     updateEvalBar();
     drawBestMoveArrow();
+    updateInsights();
     return;
   }
 
@@ -265,6 +562,7 @@ function updateEngineInfo() {
     bestMoveEl.innerHTML = "<strong>Best move:</strong> —";
     updateEvalBar();
     drawBestMoveArrow();
+    updateInsights();
     return;
   }
 
@@ -279,6 +577,7 @@ function updateEngineInfo() {
   bestMoveEl.innerHTML = `<strong>Best move:</strong> ${evalData.best_move || "—"}`;
   updateEvalBar();
   drawBestMoveArrow();
+  updateInsights();
 }
 
 function renderBoardPlayers() {
@@ -389,6 +688,7 @@ function clearAnalysisState() {
   window.maxIndex = 0;
   window.selectedGamePGN = null;
   window.currentGameMeta = null;
+  window.moveQualities = null;
 
   const moveListDiv = document.getElementById("moveList");
   if (moveListDiv) {
@@ -404,6 +704,11 @@ function clearAnalysisState() {
       "Game details will appear here",
       "Open a game to view metadata, PGN, and analysis context."
     );
+  }
+
+  const insightsDiv = document.getElementById("insightsContent");
+  if (insightsDiv) {
+    insightsDiv.innerHTML = `<div class="insight-text">Select a game to see insights.</div>`;
   }
 
   clearBoardPlayers();
@@ -422,7 +727,7 @@ function clearAnalysisState() {
 
 function createControlButtons() {
   const controls = document.getElementById("analysisControls");
-  if (!controls || controls.children.length > 0) return; // already created
+  if (!controls || controls.children.length > 0) return;
 
   const resetBtn = document.createElement("button");
   resetBtn.innerText = "<<";
@@ -520,10 +825,15 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
 
   window.boardApi.position(analysisResult.fens[0], false);
 
+  // Compute move qualities
+  window.moveQualities = computeMoveQualities(analysisResult.evaluations, analysisResult.moves);
+
   // Build move list
   const moveListDiv = document.getElementById("moveList");
   if (moveListDiv) {
     moveListDiv.innerHTML = "";
+
+    // Build move table
     const table = document.createElement("table");
     table.className = "move-table";
     const moves = analysisResult.moves || [];
@@ -532,6 +842,8 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
       const moveNumber = ply / 2 + 1;
       const whiteMove = moves[ply];
       const blackMove = moves[ply + 1];
+      const whiteQuality = window.moveQualities[ply];
+      const blackQuality = ply + 1 < moves.length ? window.moveQualities[ply + 1] : null;
 
       const tr = document.createElement("tr");
       tr.className = "animatedRow";
@@ -544,14 +856,26 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
 
       const tdWhite = document.createElement("td");
       tdWhite.className = "move-cell";
-      tdWhite.innerText = whiteMove ?? "";
+      let whiteText = whiteMove ?? "";
+      if (whiteQuality) {
+        whiteText += ` ${whiteQuality === "blunder" ? "??" : (whiteQuality === "mistake" ? "?" : "?!")}`;
+      }
+      tdWhite.innerText = whiteText;
       tdWhite.dataset.ply = String(ply);
       tr.appendChild(tdWhite);
 
       const tdBlack = document.createElement("td");
       tdBlack.className = "move-cell";
-      tdBlack.innerText = blackMove ?? "";
-      if (blackMove != null) tdBlack.dataset.ply = String(ply + 1);
+      if (blackMove != null) {
+        let blackText = blackMove;
+        if (blackQuality) {
+          blackText += ` ${blackQuality === "blunder" ? "??" : (blackQuality === "mistake" ? "?" : "?!")}`;
+        }
+        tdBlack.innerText = blackText;
+        tdBlack.dataset.ply = String(ply + 1);
+      } else {
+        tdBlack.innerText = "";
+      }
       tr.appendChild(tdBlack);
 
       table.appendChild(tr);
@@ -574,7 +898,6 @@ window.initAnalysisUI = function initAnalysisUI(analysisResult) {
   }
 
   createControlButtons();
-
   updateActiveMoveHighlight();
   updateEngineInfo();
   updateEvalBar();

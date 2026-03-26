@@ -154,11 +154,22 @@
 
           <div id="tabPanels">
             <div id="movesPanel" class="tab-panel active">
-              <div id="moveList">
-                <div class="emptyState compact">
-                  <div class="emptyStateTitle">Choose a game to begin analysis</div>
-                  <div class="emptyStateText">
-                    Move-by-move review will appear here after you open a game.
+              <div id="moveListContainer" style="height: 60%; overflow-y: auto;">
+                <div id="moveList">
+                  <div class="emptyState compact">
+                    <div class="emptyStateTitle">Choose a game to begin analysis</div>
+                    <div class="emptyStateText">
+                      Move-by-move review will appear here after you open a game.
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div id="insightsContainer" style="height: 40%; border-top: 1px solid rgba(255, 255, 255, 0.05); overflow-y: auto;">
+                <h3 class="insightsHeader">Insights</h3>
+                <div id="insightsContent" class="insights-content">
+                  <div class="emptyState compact">
+                    <div class="emptyStateTitle">Insights</div>
+                    <div class="emptyStateText">Analysis will appear here for each move.</div>
                   </div>
                 </div>
               </div>
@@ -192,7 +203,7 @@
 
     <script src="/vendor/jquery.min.js"></script>
     <script src="/vendor/chessboard-1.0.0.js"></script>
-
+    <script src="https://cdn.jsdelivr.net/npm/chess.js@0.10.3/chess.min.js"></script>
     <script src="/ui.js"></script>
     <script src="/api.js"></script>
     <script src="/app.js"></script>

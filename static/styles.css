@@ -937,6 +937,33 @@ body {
   color: #f6faff;
 }
 
+.insights-content {
+  padding: 16px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.insightsHeader {
+  font-size: 0.9rem;
+  font-weight: 800;
+  margin: 0;
+  padding: 12px 16px 8px;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.insight-text {
+  margin: 0;
+  color: var(--text);
+}
+
+/* Ensure the move list container scrolls properly */
+#moveListContainer {
+  overflow-y: auto;
+}
+
 /* ---------------------------
    Analysis content
 ---------------------------- */
