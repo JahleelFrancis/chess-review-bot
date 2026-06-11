@@ -30,6 +30,27 @@ window.endLoading = function endLoading() {
   }
 };
 
+function getGameIdFromUrl(url) {
+  if (!url) return null;
+  return String(url).replace(/\/$/, "").split("/").pop();
+}
+
+function buildGameMeta(game, resultText, formattedTimeControl) {
+  return {
+    gameId: getGameIdFromUrl(game.url),
+    whiteUsername: game.white.username,
+    whiteRating: game.white.rating,
+    blackUsername: game.black.username,
+    blackRating: game.black.rating,
+    whiteResult: game.white.result === "win" ? "win" : (game.black.result === "win" ? "loss" : "draw"),
+    blackResult: game.black.result === "win" ? "win" : (game.white.result === "win" ? "loss" : "draw"),
+    outcome: resultText,
+    timeControl: formattedTimeControl,
+    date: new Date(game.end_time * 1000).toLocaleDateString(),
+    url: game.url,
+  };
+}
+
 async function yieldNextFrame() {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
@@ -129,12 +150,13 @@ window.fetchData = async function fetchData(url, options = {}) {
     archivesDiv.innerHTML = `
       <table class="dataTable">
         <thead>
+          <tr>
             <th>Month</th>
             <th>Games</th>
           </tr>
         </thead>
         <tbody id="archivesTableBody"></tbody>
-       </table>
+      </table>
     `;
 
     const tbody = document.getElementById("archivesTableBody");
@@ -176,8 +198,81 @@ window.fetchData = async function fetchData(url, options = {}) {
     }
   } catch (error) {
     console.error("Error fetching data:", error);
+    alert(`Archive fetch failed: ${error.message}`);
   } finally {
     window.endLoading();
+  }
+};
+
+window.loadGameIntoAnalysis = async function loadGameIntoAnalysis(game, options = {}) {
+  const searchedUsername = window.currentUsernameDisplay || window.currentUsername;
+
+  let resultText = "Draw";
+
+  if (game.white.username.toLowerCase() === searchedUsername.toLowerCase()) {
+    if (game.white.result === "win") resultText = "Win 🟢";
+    else if (game.black.result === "win") resultText = "Loss 🔴";
+  } else if (game.black.username.toLowerCase() === searchedUsername.toLowerCase()) {
+    if (game.black.result === "win") resultText = "Win 🟢";
+    else if (game.white.result === "win") resultText = "Loss 🔴";
+  }
+
+  const formattedTimeControl = formatTimeControl(game.time_control);
+
+  window.selectedGamePGN = game.pgn;
+  window.currentGameMeta = buildGameMeta(game, resultText, formattedTimeControl);
+  window.currentGameId = window.currentGameMeta.gameId;
+
+  const analysisDiv = document.getElementById("analysis");
+
+  if (analysisDiv) {
+    analysisDiv.innerHTML = `
+      <h3>Game Analysis</h3>
+      <p><strong>White:</strong> ${game.white.username} (${game.white.rating})</p>
+      <p><strong>Black:</strong> ${game.black.username} (${game.black.rating})</p>
+      <p><strong>Result:</strong> ${resultText}</p>
+      <p><strong>Time Control:</strong> ${formattedTimeControl}</p>
+      <p><strong>Date:</strong> ${new Date(game.end_time * 1000).toLocaleDateString()}</p>
+      <p><a href="${game.url}" target="_blank">View on Chess.com</a></p>
+
+      <h3>Engine</h3>
+      <p id="currentEvalText"><strong>Eval:</strong> Loading...</p>
+      <p id="bestMoveText"><strong>Best move:</strong> Loading...</p>
+
+      <details class="pgnDetails">
+        <summary>Show PGN</summary>
+        <pre id="pgnBox" class="pgnBox"></pre>
+      </details>
+    `;
+
+    const pgnBox = document.getElementById("pgnBox");
+    if (pgnBox) pgnBox.innerText = game.pgn;
+  }
+
+  if (typeof window.showAnalysisMode === "function") {
+    window.showAnalysisMode();
+  }
+
+  if (!options.keepLoading && typeof window.beginLoading === "function") {
+      window.beginLoading("Analyzing game...");
+    }
+
+    try {
+      const result = await window.postData({ pgn: game.pgn });
+
+      if (result && typeof window.initAnalysisUI === "function") {
+        await window.initAnalysisUI(result);
+      } else {
+        alert("Failed to analyze game.");
+      }
+    } finally {
+      if (!options.keepLoading && typeof window.endLoading === "function") {
+        window.endLoading();
+      }
+    }
+
+  if (options.pushHistory !== false && typeof window.pushAnalysisHistory === "function") {
+    window.pushAnalysisHistory();
   }
 };
 
@@ -231,11 +326,11 @@ window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
       const searchedUsername = window.currentUsernameDisplay || window.currentUsername;
       let resultText = "Draw";
       if (game.white.username.toLowerCase() === searchedUsername.toLowerCase()) {
-        if (game.white.result === "win") resultText = "Win";
-        else if (game.black.result === "win") resultText = "Loss";
+        if (game.white.result === "win") resultText = "Win 🟢";
+        else if (game.black.result === "win") resultText = "Loss 🔴";
       } else if (game.black.username.toLowerCase() === searchedUsername.toLowerCase()) {
-        if (game.black.result === "win") resultText = "Win";
-        else if (game.white.result === "win") resultText = "Loss";
+        if (game.black.result === "win") resultText = "Win 🟢";
+        else if (game.white.result === "win") resultText = "Loss 🔴";
       }
 
       const formattedTimeControl = formatTimeControl(game.time_control);
@@ -252,60 +347,7 @@ window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
       tr.onclick = async () => {
         window.beginLoading("Loading game...");
         try {
-          window.selectedGamePGN = game.pgn;
-          window.currentGameMeta = {
-            whiteUsername: game.white.username,
-            whiteRating: game.white.rating,
-            blackUsername: game.black.username,
-            blackRating: game.black.rating,
-            outcome: resultText,
-            timeControl: formattedTimeControl,
-            date: new Date(game.end_time * 1000).toLocaleDateString(),
-            url: game.url,
-          };
-
-          // Fill Info tab (metadata and PGN)
-          const analysisDiv = document.getElementById("analysis");
-          if (analysisDiv) {
-            analysisDiv.innerHTML = `
-              <h3>Game Analysis</h3>
-              <p><strong>White:</strong> ${game.white.username} (${game.white.rating})</p>
-              <p><strong>Black:</strong> ${game.black.username} (${game.black.rating})</p>
-              <p><strong>Result:</strong> ${resultText}</p>
-              <p><strong>Time Control:</strong> ${formattedTimeControl}</p>
-              <p><strong>Date:</strong> ${new Date(game.end_time * 1000).toLocaleDateString()}</p>
-              <p><a href="${game.url}" target="_blank">View on Chess.com</a></p>
-
-              <h3>Engine</h3>
-              <p id="currentEvalText"><strong>Eval:</strong> Loading...</p>
-              <p id="bestMoveText"><strong>Best move:</strong> Loading...</p>
-
-              <details class="pgnDetails">
-                <summary>Show PGN</summary>
-                <pre id="pgnBox" class="pgnBox"></pre>
-              </details>
-            `;
-            const pgnBox = document.getElementById("pgnBox");
-            if (pgnBox) pgnBox.innerText = game.pgn;
-          }
-
-          // Switch to analysis view immediately
-          if (typeof window.showAnalysisMode === "function") {
-            window.showAnalysisMode();
-          }
-
-          // Run analysis
-          const result = await window.postData({ pgn: game.pgn });
-          if (result && typeof window.initAnalysisUI === "function") {
-            window.initAnalysisUI(result);
-          } else {
-            alert("Failed to analyze game.");
-          }
-
-          // Push history state
-          if (typeof window.pushAnalysisHistory === "function") {
-            window.pushAnalysisHistory();
-          }
+          await window.loadGameIntoAnalysis(game, { pushHistory: true });
         } catch (err) {
           console.error("Error loading game:", err);
           alert("An error occurred while loading the game.");

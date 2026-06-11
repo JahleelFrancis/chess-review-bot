@@ -10,6 +10,7 @@
   </head>
 
   <body>
+    <!-- TOP BAR -->
     <div id="topbar">
       <div id="topbarLeft">
         <span class="topbarTitleIcon" aria-hidden="true">♔</span>
@@ -43,6 +44,7 @@
               stroke-linecap="round"
             />
           </svg>
+
           <input
             type="text"
             id="username"
@@ -52,18 +54,26 @@
             required
           />
         </div>
-        <button type="button" id="fetchGamesButton" style="display: none"></button>
+
+        <button
+          type="button"
+          id="fetchGamesButton"
+          style="display: none"
+        ></button>
       </form>
     </div>
 
+    <!-- HERO / LANDING -->
     <div id="heroSection" class="heroSection">
       <div class="heroGlow"></div>
 
       <div class="heroCard">
         <div class="heroEyebrow">Game review, rebuilt</div>
+
         <h1 class="heroTitle">
           Chess Review <span class="heroAccent">Bot</span>
         </h1>
+
         <p class="heroSubtitle">
           Search any Chess.com username to browse monthly archives, inspect
           games, and jump into move-by-move review.
@@ -77,20 +87,35 @@
               placeholder="Search username..."
               autocomplete="off"
             />
-            <button type="submit" id="heroFetchButton">Fetch Archives</button>
+
+            <button type="submit" id="heroFetchButton">
+              Fetch Archives
+            </button>
           </div>
         </form>
       </div>
     </div>
 
+    <!-- MAIN PAGE -->
     <div id="page">
+
+      <!-- BROWSE VIEW -->
       <div id="browseLayout">
+
+        <!-- ARCHIVES PANEL -->
         <div class="panel" id="archivesPanel">
-          <div class="panelHeader" id="archivesHeader">Archives</div>
+          <div class="panelHeader" id="archivesHeader">
+            Archives
+          </div>
+
           <div id="archives">
             <div class="emptyState">
               <div class="emptyStateIcon">♟</div>
-              <div class="emptyStateTitle">Search a username to begin</div>
+
+              <div class="emptyStateTitle">
+                Search a username to begin
+              </div>
+
               <div class="emptyStateText">
                 Monthly archives will appear here once a Chess.com account is loaded.
               </div>
@@ -98,112 +123,245 @@
           </div>
         </div>
 
+        <!-- GAMES PANEL -->
         <div class="panel hidden" id="gamesPanel">
-          <div class="panelHeader" id="gamesHeader">Games</div>
+          <div class="panelHeader" id="gamesHeader">
+            Games
+          </div>
+
           <div id="games">
             <div class="emptyState compact">
-              <div class="emptyStateTitle">Select a month to view games</div>
+              <div class="emptyStateTitle">
+                Select a month to view games
+              </div>
+
               <div class="emptyStateText">
                 Choose an archive from the left panel to load the game list.
               </div>
             </div>
           </div>
         </div>
+
       </div>
 
+      <!-- ANALYSIS VIEW -->
       <div id="analysisLayout">
+
+        <!-- LEFT SIDE -->
         <div id="boardColumn">
-          <div class="boardPlayer boardPlayerTop">
-            <div class="boardPlayerAvatar" id="boardPlayerTopAvatar">B</div>
+
+          <!-- TOP PLAYER -->
+          <div id="boardPlayerTop" class="boardPlayer boardPlayerTop">
+            <div class="boardPlayerAvatar" id="boardPlayerTopAvatar">
+              B
+            </div>
+
             <div class="boardPlayerMeta">
-              <div class="boardPlayerLabel">Black</div>
-              <div class="boardPlayerName" id="boardPlayerTopName">—</div>
+              <div
+                id="boardPlayerTopLabel"
+                class="boardPlayerLabel"
+              >
+                BLACK
+              </div>
+
+              <div
+                class="boardPlayerName"
+                id="boardPlayerTopName"
+              >
+                —
+              </div>
             </div>
           </div>
 
+          <!-- BOARD -->
           <div id="boardShell">
+
+            <!-- EVAL BAR -->
             <div id="evalBarWrap" aria-hidden="true">
+
               <div id="evalBar">
                 <div id="evalBarBlack"></div>
                 <div id="evalBarWhite"></div>
               </div>
+
               <div id="evalBarLabel">0.0</div>
             </div>
 
+            <!-- CHESS BOARD -->
             <div id="board"></div>
           </div>
 
-          <div class="boardPlayer boardPlayerBottom boardPlayerBottomAccent">
-            <div class="boardPlayerAvatar boardPlayerAvatarAccent" id="boardPlayerBottomAvatar">W</div>
+          <!-- BOTTOM PLAYER -->
+          <div
+            id="boardPlayerBottom"
+            class="boardPlayer boardPlayerBottom boardPlayerBottomAccent"
+          >
+            <div
+              class="boardPlayerAvatar boardPlayerAvatarAccent"
+              id="boardPlayerBottomAvatar"
+            >
+              W
+            </div>
+
             <div class="boardPlayerMeta">
-              <div class="boardPlayerLabel">White</div>
-              <div class="boardPlayerName" id="boardPlayerBottomName">—</div>
+              <div
+                id="boardPlayerBottomLabel"
+                class="boardPlayerLabel"
+              >
+                WHITE
+              </div>
+
+              <div
+                class="boardPlayerName"
+                id="boardPlayerBottomName"
+              >
+                —
+              </div>
             </div>
           </div>
         </div>
 
+        <!-- RIGHT SIDE -->
         <div id="rightPanel">
+
+          <!-- TABS -->
           <div id="tabBar">
-            <button id="tabMoves" class="tab-button" type="button" disabled>
+
+            <button id="tabOverview" class="tab-button" type="button">
+              Overview
+            </button>
+            
+            <button
+              id="tabMoves"
+              class="tab-button active"
+              type="button"
+            >
               Moves
             </button>
-            <button id="tabInfo" class="tab-button active" type="button">
+
+            <button
+              id="tabInfo"
+              class="tab-button"
+              type="button"
+            >
               Info
             </button>
           </div>
 
+          <!-- TAB PANELS -->
           <div id="tabPanels">
+            <!-- OVERVIEW PANEL -->
+            <div id="overviewPanel" class="tab-panel">
+              <div id="overviewContent" class="overviewContent">
+                <div class="emptyState compact">
+                  <div class="emptyStateTitle">Overview</div>
+                  <div class="emptyStateText">
+                    Game summary will appear here after analysis.
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- MOVES PANEL -->
             <div id="movesPanel" class="tab-panel active">
-              <div id="moveListContainer" style="height: 60%; overflow-y: auto;">
+
+              <!-- MOVE LIST -->
+              <div id="moveListContainer">
                 <div id="moveList">
+
                   <div class="emptyState compact">
-                    <div class="emptyStateTitle">Choose a game to begin analysis</div>
+                    <div class="emptyStateTitle">
+                      Choose a game to begin analysis
+                    </div>
+
                     <div class="emptyStateText">
                       Move-by-move review will appear here after you open a game.
                     </div>
                   </div>
+
                 </div>
               </div>
-              <div id="insightsContainer" style="height: 40%; border-top: 1px solid rgba(255, 255, 255, 0.05); overflow-y: auto;">
-                <h3 class="insightsHeader">Insights</h3>
-                <div id="insightsContent" class="insights-content">
+
+              <!-- INSIGHTS -->
+              <div id="insightsContainer">
+
+                <h3 class="insightsHeader">
+                  Insights
+                </h3>
+
+                <div
+                  id="insightsContent"
+                  class="insights-content"
+                >
+
                   <div class="emptyState compact">
-                    <div class="emptyStateTitle">Insights</div>
-                    <div class="emptyStateText">Analysis will appear here for each move.</div>
+                    <div class="emptyStateTitle">
+                      Insights
+                    </div>
+
+                    <div class="emptyStateText">
+                      Analysis will appear here for each move.
+                    </div>
                   </div>
+
                 </div>
               </div>
             </div>
 
+            <!-- INFO PANEL -->
             <div id="infoPanel" class="tab-panel">
+
               <div id="analysis">
+
                 <div class="emptyState compact">
-                  <div class="emptyStateTitle">Game details will appear here</div>
+
+                  <div class="emptyStateTitle">
+                    Game details will appear here
+                  </div>
+
                   <div class="emptyStateText">
                     Open a game to view metadata, PGN, and analysis context.
                   </div>
+
                 </div>
               </div>
             </div>
+
           </div>
 
+          <!-- FOOTER -->
           <div id="rightPanelFooter">
             <div id="analysisControls"></div>
           </div>
+
         </div>
       </div>
     </div>
 
-    <div id="loadingOverlay" class="loadingOverlay" aria-hidden="true">
+    <!-- LOADING OVERLAY -->
+    <div
+      id="loadingOverlay"
+      class="loadingOverlay"
+      aria-hidden="true"
+    >
       <div class="loadingCard">
-        <div class="loadingSpinner" aria-hidden="true"></div>
-        <div id="loadingText" class="loadingText">Loading...</div>
+
+        <div
+          class="loadingSpinner"
+          aria-hidden="true"
+        ></div>
+
+        <div id="loadingText" class="loadingText">
+          Loading...
+        </div>
+
       </div>
     </div>
 
+    <!-- SCRIPTS -->
     <script src="/vendor/jquery.min.js"></script>
     <script src="/vendor/chessboard-1.0.0.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chess.js@0.10.3/chess.min.js"></script>
+    <script src="/vendor/chess.js"></script>
+
     <script src="/ui.js"></script>
     <script src="/api.js"></script>
     <script src="/app.js"></script>

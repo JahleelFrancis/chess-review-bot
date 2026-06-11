@@ -1,0 +1,52 @@
+[
+  {
+    "eco": "B00",
+    "name": "King's Pawn Opening",
+    "moves": ["e4"]
+  },
+  {
+    "eco": "D00",
+    "name": "Queen's Pawn Opening",
+    "moves": ["d4"]
+  },
+  {
+    "eco": "A04",
+    "name": "Reti Opening",
+    "moves": ["Nf3"]
+  },
+  {
+    "eco": "A10",
+    "name": "English Opening",
+    "moves": ["c4"]
+  },
+  {
+    "eco": "B20",
+    "name": "Sicilian Defense",
+    "moves": ["e4", "c5"]
+  },
+  {
+    "eco": "C20",
+    "name": "King's Pawn Game",
+    "moves": ["e4", "e5"]
+  },
+  {
+    "eco": "B01",
+    "name": "Scandinavian Defense",
+    "moves": ["e4", "d5"]
+  },
+  {
+    "eco": "C00",
+    "name": "French Defense",
+    "moves": ["e4", "e6"]
+  },
+  {
+    "eco": "B06",
+    "name": "Modern Defense",
+    "moves": ["e4", "g6"]
+  },
+  {
+    "eco": "D06",
+    "name": "Queen's Gambit",
+    "moves": ["d4", "d5", "c4"]
+  }
+]
