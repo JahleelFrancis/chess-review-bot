@@ -1457,3 +1457,74 @@ body.view-analysis #analysisLayout {
 .quality-miss { background: #ff6b5f; }
 .quality-blunder { background: #ff4d5e; }
 
+.qualityRow {
+  background: transparent !important;
+}
+
+.qualityName {
+  color: var(--text, #dbe4f0);
+}
+
+.qualityCount {
+  text-align: right;
+}
+
+.qualityCountButton {
+  min-width: 24px;
+  padding: 0;
+  border: none !important;
+  border-radius: 0;
+  background: transparent !important;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.12s ease, filter 0.12s ease, opacity 0.12s ease;
+}
+
+.qualityCountButton:hover:not(:disabled) {
+  transform: scale(1.15);
+  filter: brightness(1.25);
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.qualityCountButton:disabled {
+  opacity: 0.45;
+  cursor: default;
+  border: none !important;
+  background: transparent !important;
+}
+
+.evalGraphWrap {
+  border-radius: 10px;
+}
+
+.evalDot {
+  cursor: pointer;
+  transition: r 0.12s ease, filter 0.12s ease;
+}
+
+.evalDot:hover {
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+.moveQualityText {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+
+.moveQualityText {
+  display: inline-block;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+
+.moveCell.active .moveQualityText {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

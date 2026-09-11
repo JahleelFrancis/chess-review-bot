@@ -1,8 +1,89 @@
 /*
   ui.js
+  Stable move-quality rollback: removes the aggressive rating-gap label modifier while keeping UI colour/click features.
+
+  ui.js
   -----
   Now with Opening Book support and Expected Points classification.
 */
+
+
+const QUALITY_STYLES = {
+  brilliant: { color: "#26c6da", label: "Brilliant" },
+  great: { color: "#6aa9ff", label: "Great" },
+  book: { color: "#c99a63", label: "Book" },
+  best: { color: "#7bd66f", label: "Best" },
+  excellent: { color: "#8bdc7c", label: "Excellent" },
+  good: { color: "#b8c2d0", label: "Good" },
+  inaccuracy: { color: "#f4c542", label: "Inaccuracy" },
+  mistake: { color: "#ff9f43", label: "Mistake" },
+  miss: { color: "#ff5f6d", label: "Miss" },
+  blunder: { color: "#ff3b3b", label: "Blunder" },
+};
+
+function getMoveSideFromIndex(index) {
+  return index % 2 === 0 ? "white" : "black";
+}
+
+function findFirstMoveOfQuality(quality, side) {
+  const qualities = window.moveQualities || window.analysisResult?.moveQualities || [];
+
+  for (let i = 0; i < qualities.length; i++) {
+    const q = qualities[i];
+
+    if (!q) continue;
+
+    const moveSide = getMoveSideFromIndex(i);
+
+    if (q.type === quality && moveSide === side) {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+function jumpToQuality(quality, side) {
+  const moveIndex = findFirstMoveOfQuality(quality, side);
+
+  if (moveIndex === -1) {
+    return;
+  }
+
+  jumpToMoveIndex(moveIndex);
+}
+
+function jumpToMoveIndex(moveIndex) {
+  const analysis = window.analysisResult;
+  if (!analysis || !Array.isArray(analysis.fens)) return;
+
+  // moveIndex is 0-based in moveQualities.
+  // currentMoveIndex is FEN/ply based, so add 1.
+  const targetPly = clamp(
+    Number(moveIndex) + 1,
+    0,
+    window.maxIndex || analysis.fens.length - 1
+  );
+
+  window.currentMoveIndex = targetPly;
+
+  if (window.boardApi && analysis.fens[targetPly]) {
+    window.boardApi.position(analysis.fens[targetPly], true);
+  }
+
+  updateUI();
+
+  if (targetPly === 0 || Number(moveIndex) <= 0) {
+    requestAnimationFrame(resetMoveListScroll);
+  }
+
+  setActiveTab("moves");
+  updateUI();
+}
+
+window.jumpToQuality = jumpToQuality;
+window.jumpToMoveIndex = jumpToMoveIndex;
+
 
 // --- State Management ---
 function setActiveTab(tabName) {
@@ -706,27 +787,317 @@ function pvMaterialGainForPlayer(boardAfterMove, pv, playerMultiplier, maxPlies 
 function getEpErrorThresholds(playerRating, beforeEP) {
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
-  const rating = clamp(Number(playerRating) || 1000, 400, 3200);
-  const skill = (rating - 400) / 2800;
+  const rating = clamp(Number(playerRating) || 1000, 300, 3000);
+  const skill = (rating - 300) / 2700;
 
-  // Higher-rated players are judged slightly more strictly.
-  const ratingStrictness = 1 - skill * 0.18;
+  // Lower-rated players get a tiny bit more forgiveness,
+  // but not enough to completely change the category.
+  const ratingFactor = 1.08 - skill * 0.16;
 
-  // EP is less sensitive in already extreme positions.
+  // EP swings are less meaningful when the game is already almost decided.
   const extremePositionFactor =
-    beforeEP >= 0.90 || beforeEP <= 0.10
-      ? 1.15
-      : 1.0;
+    beforeEP >= 0.88 || beforeEP <= 0.12
+      ? 1.16
+      : beforeEP >= 0.80 || beforeEP <= 0.20
+        ? 1.08
+        : 1.0;
 
   return {
-    inaccuracy: 0.055 * ratingStrictness * extremePositionFactor,
-    mistake: 0.135 * ratingStrictness * extremePositionFactor,
-    blunder: 0.285 * ratingStrictness * extremePositionFactor,
+    inaccuracy: 0.055 * ratingFactor * extremePositionFactor,
+    mistake: 0.125 * ratingFactor * extremePositionFactor,
+    blunder: 0.245 * ratingFactor * extremePositionFactor,
   };
 }
 
+const BAD_MOVE_TYPES = new Set(["inaccuracy", "mistake", "miss", "blunder"]);
 
-function computeMoveQualities(evals, moves, uciMoves, fens, bookMap) {
+function getSanAt(moves, index) {
+  const move = moves?.[index];
+
+  if (!move) return "";
+
+  if (typeof move === "string") return move;
+
+  return (
+    move.san ||
+    move.move ||
+    move.notation ||
+    move.lan ||
+    ""
+  );
+}
+
+function cleanSan(san) {
+  return String(san || "")
+    .replace(/[!?]+/g, "")
+    .trim();
+}
+
+function isCaptureSan(san) {
+  return cleanSan(san).includes("x");
+}
+
+function isCheckSan(san) {
+  return /[+#]/.test(cleanSan(san));
+}
+
+function isMateSan(san) {
+  return /#/.test(cleanSan(san));
+}
+
+function isCastleSan(san) {
+  return /^O-O/.test(cleanSan(san));
+}
+
+function isKingMoveSan(san) {
+  return /^K/.test(cleanSan(san));
+}
+
+function isPromotionSan(san) {
+  return /=/.test(cleanSan(san));
+}
+
+function isLikelyRoutineRecapture(moves, index) {
+  const san = getSanAt(moves, index);
+  const prevSan = getSanAt(moves, index - 1);
+
+  if (!isCaptureSan(san)) return false;
+  if (!isCaptureSan(prevSan)) return false;
+
+  return true;
+}
+
+function isBookishMove(q) {
+  return q?.type === "book" || q?.isBook === true;
+}
+
+function isBadMove(q) {
+  return BAD_MOVE_TYPES.has(q?.type);
+}
+
+function getCp(q, key) {
+  const value = Number(q?.[key]);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function getEvalLoss(q) {
+  const value = Number(q?.evalLoss);
+  return Number.isFinite(value) ? Math.abs(value) : 0;
+}
+
+function getEpLoss(q) {
+  const value = Number(q?.epLoss);
+  return Number.isFinite(value) ? Math.abs(value) : 0;
+}
+
+function getTopMoveGap(q) {
+  const value = Number(q?.topMoveGap);
+  return Number.isFinite(value) ? Math.abs(value) : 0;
+}
+
+function isActualSacrifice(q) {
+  const reason = String(q?.brilliantReason || "").toLowerCase();
+
+  return (
+    q?.sacrificesMaterial === true ||
+    q?.sacrificeMaterial === true ||
+    q?.isSacrifice === true ||
+    reason.includes("sacrifice") ||
+    reason.includes("hanging-piece")
+  );
+}
+
+function isQuietThreatIgnore(q, san) {
+  const reason = String(q?.brilliantReason || "").toLowerCase();
+
+  if (!reason.includes("ignored")) return false;
+  if (!reason.includes("threat")) return false;
+
+  // Quiet brilliants should not just be normal captures/checks.
+  if (isCaptureSan(san)) return false;
+  if (isCheckSan(san)) return false;
+
+  return true;
+}
+
+function isSimpleSpecialMoveSan(san) {
+  return (
+    isKingMoveSan(san) ||
+    isCastleSan(san) ||
+    isPromotionSan(san) ||
+    isMateSan(san)
+  );
+}
+
+function fallbackStrongMoveType(q) {
+  const evalLoss = getEvalLoss(q);
+  const epLoss = getEpLoss(q);
+
+  if (evalLoss <= 15 && epLoss <= 0.015) return "best";
+  if (evalLoss <= 45 && epLoss <= 0.045) return "excellent";
+  if (evalLoss <= 80 && epLoss <= 0.070) return "good";
+
+  return q?.type || "good";
+}
+
+function shouldAllowBrilliantPromotion(q, moves, index) {
+  const san = getSanAt(moves, index);
+
+  if (!q) return false;
+  if (isBookishMove(q)) return false;
+  if (isBadMove(q)) return false;
+  if (isSimpleSpecialMoveSan(san)) return false;
+  if (isLikelyRoutineRecapture(moves, index)) return false;
+
+  const evalLoss = getEvalLoss(q);
+  const epLoss = getEpLoss(q);
+  const topMoveGap = getTopMoveGap(q);
+  const beforeCp = getCp(q, "beforeCpPlayer");
+  const afterCp = getCp(q, "afterCpPlayer");
+
+  const nearPerfect =
+    evalLoss <= 25 &&
+    epLoss <= 0.035;
+
+  if (!nearPerfect) return false;
+
+  const actualSacrifice = isActualSacrifice(q);
+  const quietThreatIgnore = isQuietThreatIgnore(q, san);
+
+  // Real sacrifices can be brilliant even when already better.
+  if (actualSacrifice) {
+    if (topMoveGap < 35) return false;
+
+    // Do not call totally obvious recaptures/captures brilliant.
+    if (isLikelyRoutineRecapture(moves, index)) return false;
+
+    return true;
+  }
+
+  // Non-sacrifice brilliants should be much rarer.
+  // This is for moves like d3 / Nf5 where a player ignores a threat
+  // because there is a stronger tactical resource.
+  if (quietThreatIgnore) {
+    const positionIsStillCompetitive =
+      beforeCp > -350 &&
+      beforeCp < 450;
+
+    const moveDoesNotHurt =
+      afterCp >= beforeCp - 25;
+
+    const moveHasTacticalSeparation =
+      topMoveGap >= 25;
+
+    if (!positionIsStillCompetitive) return false;
+    if (!moveDoesNotHurt) return false;
+    if (!moveHasTacticalSeparation) return false;
+
+    return true;
+  }
+
+  return false;
+}
+
+function shouldAllowGreatPromotion(q, moves, index) {
+  const san = getSanAt(moves, index);
+
+  if (!q) return false;
+  if (isBookishMove(q)) return false;
+  if (isBadMove(q)) return false;
+  if (q.type === "brilliant") return false;
+  if (isSimpleSpecialMoveSan(san)) return false;
+
+  const evalLoss = getEvalLoss(q);
+  const epLoss = getEpLoss(q);
+  const topMoveGap = getTopMoveGap(q);
+  const beforeCp = getCp(q, "beforeCpPlayer");
+  const afterCp = getCp(q, "afterCpPlayer");
+
+  const isNearBest =
+    evalLoss <= 45 &&
+    epLoss <= 0.045;
+
+  if (!isNearBest) return false;
+
+  const routineRecapture = isLikelyRoutineRecapture(moves, index);
+  if (routineRecapture) return false;
+
+  const actualSacrifice = isActualSacrifice(q);
+
+  const savesBadPosition =
+    beforeCp < -80 &&
+    afterCp > beforeCp + 120;
+
+  const findsBigOnlyMove =
+    topMoveGap >= 120;
+
+  const improvesClearly =
+    afterCp > beforeCp + 80;
+
+  const alreadyCompletelyWinning =
+    beforeCp > 650 &&
+    afterCp > 650;
+
+  if (alreadyCompletelyWinning && !actualSacrifice) return false;
+
+  // Captures are common. Do not auto-upgrade normal captures just because
+  // they are engine best. They need extra context.
+  if (isCaptureSan(san)) {
+    return (
+      actualSacrifice ||
+      savesBadPosition ||
+      improvesClearly ||
+      topMoveGap >= 180
+    );
+  }
+
+  return (
+    savesBadPosition ||
+    findsBigOnlyMove ||
+    improvesClearly ||
+    q?.likelyGreatMove === true
+  );
+}
+
+function applyStrictSpecialMovePromotions(qualities, moves) {
+  if (!Array.isArray(qualities)) return qualities;
+
+  for (let i = 0; i < qualities.length; i++) {
+    const q = qualities[i];
+    if (!q) continue;
+
+    // If the old loose system already promoted something, demote it first
+    // unless it passes the stricter rules below.
+    if (q.type === "brilliant" && !shouldAllowBrilliantPromotion(q, moves, i)) {
+      q.type = fallbackStrongMoveType(q);
+      q.brilliantReason = null;
+    }
+
+    if (q.type === "great" && !shouldAllowGreatPromotion(q, moves, i)) {
+      q.type = fallbackStrongMoveType(q);
+      q.likelyGreatMove = false;
+    }
+  }
+
+  for (let i = 0; i < qualities.length; i++) {
+    const q = qualities[i];
+    if (!q) continue;
+
+    if (shouldAllowBrilliantPromotion(q, moves, i)) {
+      q.type = "brilliant";
+      continue;
+    }
+
+    if (shouldAllowGreatPromotion(q, moves, i)) {
+      q.type = "great";
+    }
+  }
+
+  return qualities;
+}
+
+
+function computeMoveQualities(evals, moves, uciMoves, fens, bookMap, openingNameMap = {}) {
   const qualities = [];
   const meta = window.currentGameMeta || {};
 
@@ -815,12 +1186,6 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap) {
     const moveNumber = Math.floor(i / 2) + 1;
     const bookKey = fenPositionKey(fens[i]);
 
-    const isBook =
-      moveNumber <= 18 &&
-      bookMap &&
-      Array.isArray(bookMap[bookKey]) &&
-      bookMap[bookKey].includes(uci);
-
     const isTopMove =
       playedTopLineIndex === 0 ||
       uci === best;
@@ -830,6 +1195,55 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap) {
       uci === third ||
       playedTopLineIndex === 1 ||
       playedTopLineIndex === 2;
+
+    const isListedBookMove =
+      bookMap &&
+      Array.isArray(bookMap[bookKey]) &&
+      bookMap[bookKey].includes(uci);
+
+    const isKnownOpeningPosition =
+      openingNameMap &&
+      Boolean(openingNameMap[bookKey]);
+
+    const previousPlyWasBook =
+      i >= 1 &&
+      qualities[i - 1]?.type === "book";
+
+    const previousOwnMoveWasBook =
+      i >= 2 &&
+      qualities[i - 2]?.type === "book";
+
+    const openingBookChainActive =
+      moveNumber <= 5 &&
+      (
+        isListedBookMove ||
+        isKnownOpeningPosition ||
+        previousPlyWasBook ||
+        previousOwnMoveWasBook ||
+        moveNumber <= 2
+      );
+
+    const isLowRiskOpeningMove =
+      evalLoss <= 100 &&
+      epLoss <= 0.055 &&
+      (
+        isTopMove ||
+        isNearTopMove ||
+        isKnownOpeningPosition ||
+        openingBookChainActive
+      );
+
+    const isEarlyKnownOpeningMove =
+      moveNumber <= 5 &&
+      openingBookChainActive &&
+      isLowRiskOpeningMove;
+
+    const isBook =
+      moveNumber <= 12 &&
+      (
+        isListedBookMove ||
+        isEarlyKnownOpeningMove
+      );
 
     const isCheckResponse =
       i > 0 &&
@@ -868,12 +1282,24 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap) {
         : 0;
 
     let isRoutineCaptureOrTrade = false;
+    let moveShape = null;
+    let movedPieceValue = 0;
+    let capturedPieceValue = 0;
+    let quietMove = false;
 
     try {
       const shapeBoard = new Chess(fens[i]);
       const shapeMove = getLegalMoveFromUci(shapeBoard, uci);
 
       if (shapeMove) {
+        moveShape = shapeMove;
+        movedPieceValue = pieceValue(shapeMove.piece);
+        capturedPieceValue = pieceValue(shapeMove.captured);
+        quietMove =
+          !shapeMove.captured &&
+          !san.includes("+") &&
+          !san.includes("#");
+
         isRoutineCaptureOrTrade =
           Boolean(shapeMove.captured) &&
           evalGain < 100 &&
@@ -884,27 +1310,96 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap) {
       isRoutineCaptureOrTrade = false;
     }
 
+    const engineApproved =
+      epLoss <= 0.025 &&
+      evalLoss <= 70 &&
+      (
+        isTopMove ||
+        isNearTopMove ||
+        topMoveGap >= 120
+      );
+
+    const positionAlreadyDecisiveForPlayer =
+      beforeCpPlayer >= 850 ||
+      beforeEP >= 0.88;
+
+    const positionAlreadyDecisiveAgainstPlayer =
+      beforeCpPlayer <= -900 ||
+      beforeEP <= 0.08;
+
+    const positionStillCompetitive =
+      !positionAlreadyDecisiveForPlayer &&
+      !positionAlreadyDecisiveAgainstPlayer;
+
     const createsBigSwing =
-      evalGain >= 240 ||
-      epGain >= 0.03;
+      positionStillCompetitive &&
+      (
+        evalGain >= 260 ||
+        epGain >= 0.04
+      );
 
     const savesBadPosition =
       beforeCpPlayer <= -150 &&
       afterCpPlayer >= -50 &&
-      evalGain >= 150;
+      (
+        evalGain >= 150 ||
+        epGain >= 0.05
+      );
 
     const clearlyOnlyGoodMove =
-      topMoveGap >= 200 &&
+      positionStillCompetitive &&
+      topMoveGap >= 260 &&
       evalLoss <= 45 &&
       epLoss <= 0.02 &&
       !isRoutineKingCheckResponse &&
       !isRoutineCaptureOrTrade;
 
-    const strongTacticalFind =
-      beforeCpPlayer < 900 &&
-      evalGain >= 220 &&
-      epGain >= 0.015 &&
+    const winsOrPressuresMaterial =
+      moveShape &&
+      isCapture &&
+      capturedPieceValue > 0 &&
+      (
+        capturedPieceValue >= movedPieceValue ||
+        afterCpPlayer >= beforeCpPlayer + 80 ||
+        topMoveGap >= 120
+      );
+
+    const findsImportantTacticalResource =
+      positionStillCompetitive &&
+      engineApproved &&
+      !quietMove &&
+      (
+        winsOrPressuresMaterial ||
+        givesCheck ||
+        topMoveGap >= 180
+      ) &&
+      (
+        topMoveGap >= 90 ||
+        evalGain >= 120 ||
+        epGain >= 0.018
+      ) &&
       !isRoutineCaptureOrTrade;
+
+    const strongTacticalFind =
+      positionStillCompetitive &&
+      engineApproved &&
+      evalGain >= 220 &&
+      epGain >= 0.018 &&
+      !isRoutineCaptureOrTrade;
+
+    const moveLooksTactical =
+      givesCheck ||
+      winsOrPressuresMaterial ||
+      topMoveGap >= 160 ||
+      evalGain >= 180 ||
+      epGain >= 0.03;
+
+    const isOrdinaryBestMove =
+      isTopMove &&
+      !savesBadPosition &&
+      !clearlyOnlyGoodMove &&
+      !createsBigSwing &&
+      !moveLooksTactical;
 
     const likelyGreatMove =
       !isBook &&
@@ -912,12 +1407,21 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap) {
       !forcedMate &&
       !isRoutineKingCheckResponse &&
       !isRoutineCaptureOrTrade &&
-      epLoss <= 0.035 &&
+      engineApproved &&
+      !positionAlreadyDecisiveForPlayer &&
+      !isOrdinaryBestMove &&
       (
-        createsBigSwing ||
         savesBadPosition ||
         clearlyOnlyGoodMove ||
-        strongTacticalFind
+        (
+          moveLooksTactical &&
+          (
+            createsBigSwing ||
+            topMoveGap >= 180 ||
+            evalGain >= 220 ||
+            epGain >= 0.04
+          )
+        )
       );
 
     let isBrilliantMove = false;
@@ -966,10 +1470,9 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap) {
           afterCpPlayer > -1000;
 
         const hasRealCompensation =
-          evalGain >= 140 ||
-          epGain >= 0.015 ||
-          topMoveGap >= 140 ||
-          afterCpPlayer >= 220;
+          evalGain >= 180 ||
+          epGain >= 0.018 ||
+          topMoveGap >= 180;
 
         const sacrificesMaterialNow =
           materialChangeForPlayer <= -2;
@@ -1117,21 +1620,37 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap) {
             topMoveGap >= 180
           );
 
+        const realSacrificeBrilliant =
+          immediateSacrificeBrilliant ||
+          hangingPieceBrilliant ||
+          lowerValueCaptureBrilliant;
+
+        const poisonedMajorPieceBrilliant =
+          ignoredThreatBrilliant &&
+          moveIsEngineApproved &&
+          epLoss <= 0.018 &&
+          afterCpPlayer >= beforeCpPlayer - 35 &&
+          (
+            topMoveGap >= 160 ||
+            evalGain >= 180 ||
+            epGain >= 0.025
+          );
+
         const canBeBrilliant =
           !isBook &&
           !forced &&
           !forcedMate &&
           !isKingMove &&
-          !isRoutineKingCheckResponse;
+          !isRoutineKingCheckResponse &&
+          beforeCpPlayer < 450 &&
+          beforeEP < 0.78 &&
+          afterCpPlayer > -700;
 
         if (
           canBeBrilliant &&
           (
-            immediateSacrificeBrilliant ||
-            hangingPieceBrilliant ||
-            lowerValueCaptureBrilliant ||
-            ignoredThreatBrilliant ||
-            quietTacticalBrilliant
+            realSacrificeBrilliant ||
+            poisonedMajorPieceBrilliant
           )
         ) {
           isBrilliantMove = true;
@@ -1146,8 +1665,6 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap) {
             brilliantReason = "ignored queen threat";
           } else if (engineSaysRookThreatIsPoisoned) {
             brilliantReason = "ignored rook threat";
-          } else if (quietTacticalBrilliant) {
-            brilliantReason = "quiet tactical idea";
           }
         }
       }
@@ -1196,9 +1713,9 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap) {
       const afterMateAgainstPlayer =
         afterCpPlayer <= -9000;
 
-      const alreadyLost =
-        beforeCpPlayer <= -900 ||
-        beforeEP <= 0.08;
+      const alreadyCompletelyLost =
+        beforeCpPlayer <= -1800 ||
+        beforeEP <= 0.025;
 
       const beforeWinning =
         beforeMateForPlayer ||
@@ -1210,23 +1727,26 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap) {
         beforeEP >= 0.68;
 
       const beforePlayable =
-        beforeCpPlayer >= -200 &&
-        beforeEP >= 0.28;
+        beforeCpPlayer >= -650 &&
+        beforeEP >= 0.12;
+
+      const beforeOkayOrBetter =
+        beforeCpPlayer >= -250 &&
+        beforeEP >= 0.24;
 
       const afterLost =
-        afterCpPlayer <= -700 ||
-        afterEP <= 0.10;
+        afterCpPlayer <= -900 ||
+        afterEP <= 0.08;
 
       const afterVeryBad =
-        afterCpPlayer <= -400 ||
-        afterEP <= 0.18;
+        afterCpPlayer <= -450 ||
+        afterEP <= 0.16;
 
       const afterStillHasGame =
-        afterCpPlayer >= -1200 &&
-        afterEP >= 0.04;
+        afterCpPlayer >= -450 &&
+        afterEP >= 0.12;
 
-      // Miss = failed to take a clear opportunity.
-      // Keep this narrow so ordinary mistakes do not become misses.
+      // Miss = failed to take a clear chance, but did not instantly destroy the game.
       const missedForcedMate =
         !isTopMove &&
         beforeMateForPlayer &&
@@ -1235,148 +1755,212 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap) {
       const missedForcedWin =
         !isTopMove &&
         beforeCpPlayer >= 900 &&
-        evalLoss >= 500 &&
-        epLoss >= 0.12 &&
+        evalLoss >= 450 &&
+        epLoss >= 0.10 &&
         afterStillHasGame;
 
       const missedWinningChance =
         !isTopMove &&
         beforeClearlyBetter &&
-        topMoveGap >= 100 &&
-        evalLoss >= 150 &&
-        epLoss >= 0.08 &&
-        epLoss <= 0.45 &&
+        topMoveGap >= 130 &&
+        evalLoss >= 200 &&
+        epLoss >= 0.075 &&
+        epLoss <= 0.42 &&
         afterStillHasGame;
 
       const missedOnlyGoodMove =
         !isTopMove &&
-        topMoveGap >= 220 &&
-        evalLoss >= 130 &&
+        beforePlayable &&
+        topMoveGap >= 240 &&
+        evalLoss >= 150 &&
         epLoss >= 0.07 &&
-        epLoss <= 0.45 &&
-        afterStillHasGame;
-
-      const missedPlayableTactic =
-        !isTopMove &&
-        beforeCpPlayer >= -50 &&
-        topMoveGap >= 90 &&
-        evalLoss >= 130 &&
-        epLoss >= 0.09 &&
-        epLoss <= 0.32 &&
+        epLoss <= 0.38 &&
         afterStillHasGame;
 
       const isMissOpportunity =
-        !alreadyLost &&
+        !alreadyCompletelyLost &&
         (
           missedForcedMate ||
           missedForcedWin ||
           missedWinningChance ||
-          missedOnlyGoodMove ||
-          missedPlayableTactic
+          missedOnlyGoodMove
         );
 
-      // Blunder = the move destroys a playable or winning game.
+      // Blunder = move destroys a playable/winning game.
       const walksIntoMate =
-        !alreadyLost &&
+        !alreadyCompletelyLost &&
         afterMateAgainstPlayer;
 
       const playableToLost =
-        !alreadyLost &&
+        !alreadyCompletelyLost &&
         beforePlayable &&
         afterLost &&
-        epLoss >= thresholds.blunder;
+        (
+          epLoss >= thresholds.blunder * 0.75 ||
+          evalLoss >= 550
+        );
 
       const winningToVeryBad =
-        !alreadyLost &&
+        !alreadyCompletelyLost &&
         beforeWinning &&
         afterVeryBad &&
-        epLoss >= thresholds.blunder;
+        (
+          epLoss >= thresholds.blunder * 0.65 ||
+          evalLoss >= 500
+        );
 
       const hugeEpCollapse =
-        !alreadyLost &&
-        epLoss >= thresholds.blunder + 0.08 &&
+        !alreadyCompletelyLost &&
+        epLoss >= thresholds.blunder &&
         afterVeryBad;
 
       const hugeEvalCollapse =
-        !alreadyLost &&
-        evalLoss >= 800 &&
+        !alreadyCompletelyLost &&
+        evalLoss >= 700 &&
         afterVeryBad;
 
       const tacticalCollapse =
-        !alreadyLost &&
-        beforeCpPlayer >= -100 &&
-        afterCpPlayer <= -350 &&
-        epLoss >= thresholds.mistake &&
-        evalLoss >= 250 &&
-        topMoveGap >= 120;
-
-      const sharpTacticalBlunder =
-        !alreadyLost &&
-        !isMissOpportunity &&
-        beforeCpPlayer >= -80 &&
-        afterCpPlayer <= -250 &&
-        epLoss >= 0.17 &&
-        evalLoss >= 220 &&
-        topMoveGap <= 90;
-
-      const isBlunder =
-        !isMissOpportunity &&
+        !alreadyCompletelyLost &&
+        beforeOkayOrBetter &&
+        afterVeryBad &&
+        evalLoss >= 320 &&
         (
-          walksIntoMate ||
-          playableToLost ||
-          winningToVeryBad ||
-          hugeEpCollapse ||
-          hugeEvalCollapse ||
-          tacticalCollapse ||
-          sharpTacticalBlunder
+          epLoss >= thresholds.mistake ||
+          topMoveGap >= 170
         );
 
-      const moveDropsClearly =
-        beforeCpPlayer >= -100 &&
-        afterCpPlayer <= beforeCpPlayer - 180 &&
-        epLoss >= thresholds.inaccuracy;
+      const materialBlunder =
+        !alreadyCompletelyLost &&
+        beforeCpPlayer > -700 &&
+        afterCpPlayer <= beforeCpPlayer - 420 &&
+        evalLoss >= 380 &&
+        (
+          epLoss >= thresholds.mistake ||
+          afterCpPlayer <= -450
+        );
 
-      const inaccuracyFloor =
-        Math.max(thresholds.inaccuracy * 1.35, 0.07);
+      const isBlunder =
+        walksIntoMate ||
+        playableToLost ||
+        winningToVeryBad ||
+        hugeEpCollapse ||
+        hugeEvalCollapse ||
+        tacticalCollapse ||
+        materialBlunder;
 
       const mistakeFloor =
-        Math.max(thresholds.mistake * 0.75, 0.10);
+        Math.max(thresholds.mistake * 0.72, 0.085);
 
       const isMistake =
         !isBlunder &&
         !isMissOpportunity &&
         (
           epLoss >= mistakeFloor ||
-          (epLoss >= 0.095 && evalLoss >= 170) ||
-          (evalLoss >= 260 && epLoss >= 0.065) ||
-          moveDropsClearly
-        );
-
-      const isInaccuracy =
-        !isBlunder &&
-        !isMissOpportunity &&
-        !isMistake &&
-        (
-          epLoss >= inaccuracyFloor ||
-          (evalLoss >= 130 && epLoss >= 0.045)
-        );
-
-      const isGoodButNotBest =
-        !isBlunder &&
-        !isMissOpportunity &&
-        !isMistake &&
-        !isInaccuracy &&
-        (
-          // Small but meaningful loss where the engine's best move was clearly better
+          (evalLoss >= 220 && epLoss >= 0.055) ||
+          (evalLoss >= 130 && epLoss >= 0.085) ||
           (
-            (epLoss >= 0.022 || evalLoss >= 45) &&
-            topMoveGap >= 18
+            beforeClearlyBetter &&
+            afterCpPlayer < 80 &&
+            evalLoss >= 180
           ) ||
-
-          // Or a bigger harmless drop, even if the top move gap is small
-          epLoss >= 0.055 ||
-          evalLoss >= 85
+          (
+            beforePlayable &&
+            afterCpPlayer <= beforeCpPlayer - 240 &&
+            epLoss >= thresholds.inaccuracy
+          )
         );
+
+      // Good gets checked BEFORE inaccuracy.
+      // This catches harmless suboptimal moves that Chess.com usually calls Good.
+      const quietMove =
+  !givesCheck &&
+  !isCapture &&
+  !winsOrPressuresMaterial &&
+  topMoveGap < 140;
+
+const stillPlayableAfter =
+  afterCpPlayer > -650 &&
+  afterEP > 0.10;
+
+// This is now much stricter.
+// It only forgives genuinely harmless quiet moves.
+// The old version was letting 0.06–0.07 EP losses become Good too often.
+const softErrorShouldBeForgiven =
+  quietMove &&
+  stillPlayableAfter &&
+  epLoss < 0.055 &&
+  evalLoss < 95 &&
+  topMoveGap <= 35 &&
+  !beforeWinning &&
+  !createsBigSwing;
+
+// This is the important new middle zone.
+// These are not always mistakes, but they should not be called Good either.
+const quietMoveHasRealCost =
+  quietMove &&
+  stillPlayableAfter &&
+  (
+    epLoss >= 0.058 ||
+    evalLoss >= 100 ||
+    topMoveGap >= 45 ||
+    afterCpPlayer <= -300
+  );
+
+// Good should be for small, playable losses.
+// It should not absorb every quiet move.
+const isGoodButNotBest =
+  !isBlunder &&
+  !isMissOpportunity &&
+  !isMistake &&
+  !quietMoveHasRealCost &&
+  afterCpPlayer > -650 &&
+  (
+    (
+      epLoss < Math.max(thresholds.inaccuracy * 0.9, 0.045) &&
+      evalLoss < 90 &&
+      (
+        isNearTopMove ||
+        topMoveGap <= 70 ||
+        epLoss < 0.03 ||
+        evalLoss < 55
+      )
+    ) ||
+    softErrorShouldBeForgiven
+  );
+
+const inaccuracyFloor =
+  Math.max(thresholds.inaccuracy * 0.95, 0.055);
+
+const inaccuracyHasConsequence =
+  quietMoveHasRealCost ||
+  topMoveGap >= 55 ||
+  evalLoss >= 100 ||
+  afterCpPlayer <= -300 ||
+  (
+    beforeClearlyBetter &&
+    afterCpPlayer < beforeCpPlayer - 80
+  );
+
+const isInaccuracy =
+  !isBlunder &&
+  !isMissOpportunity &&
+  !isMistake &&
+  !isGoodButNotBest &&
+  (
+    (
+      epLoss >= inaccuracyFloor &&
+      inaccuracyHasConsequence
+    ) ||
+    (
+      evalLoss >= 120 &&
+      epLoss >= 0.04
+    ) ||
+    (
+      beforeClearlyBetter &&
+      evalLoss >= 90 &&
+      epLoss >= 0.035
+    )
+  );
 
       if (isBlunder) {
         type = "blunder";
@@ -1393,13 +1977,13 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap) {
         sev = "mistake";
       }
 
+      else if (isGoodButNotBest) {
+        type = "good";
+      }
+
       else if (isInaccuracy) {
         type = "inaccuracy";
         sev = "inaccuracy";
-      }
-
-      else if (isGoodButNotBest) {
-        type = "good";
       }
 
       else {
@@ -1449,6 +2033,30 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap) {
       insight,
     });
   }
+
+  const movesForPromotion =
+    window.analysisResult?.moves ||
+    window.analysisResult?.game?.moves ||
+    moves ||
+    [];
+
+  applyStrictSpecialMovePromotions(qualities, movesForPromotion);
+
+  qualities.forEach((q, i) => {
+    if (!q) return;
+
+    q.insight = generateMoveInsight({
+      moveSan: moves[i],
+      quality: q.type,
+      severity: q.severity,
+      evalLoss: q.evalLoss,
+      evalGain: q.evalGain,
+      engineBest: q.engineBest,
+    });
+  });
+
+  window.moveQualities = qualities;
+  window.moveContexts = qualities;
 
   return qualities;
 }
@@ -1736,6 +2344,7 @@ function renderEvalGraph(result) {
     const x = pad + (i / Math.max(1, evals.length - 1)) * (width - pad * 2);
     const y = pad + ((800 - cp) / 1600) * (height - pad * 2);
 
+    // Keep the chart focused on the searched player's moves.
     const isPlayerMove = i > 0 && ((i - 1) % 2 === 0) === searchedIsWhite;
 
     return { x, y, cp, i, isPlayerMove };
@@ -1748,16 +2357,11 @@ function renderEvalGraph(result) {
       if (!p.isPlayerMove) return "";
 
       const q = window.moveQualities?.[p.i - 1];
-      let fill = "#8f9bad";
-
-      if (q?.type === "brilliant") fill = "#2dd4bf";
-      else if (q?.type === "great") fill = "#7db7ff";
-      else if (q?.type === "best") fill = "#8bcf5a";
-      else if (q?.type === "book") fill = "#d2a76f";
-      else if (q?.severity === "inaccuracy") fill = "#f4c542";
-      else if (q?.severity === "mistake") fill = "#ff9f43";
-      else if (q?.severity === "miss") fill = "#ff6b5f";
-      else if (q?.severity === "blunder") fill = "#ff4d5e";
+      const qualityKey = q?.type || q?.severity || "good";
+      const style = QUALITY_STYLES[qualityKey] || QUALITY_STYLES.good;
+      const fill = style.color;
+      const moveSan = result.moves?.[p.i - 1] || "";
+      const moveLabel = `${p.i}. ${moveSan} - ${style.label}`;
 
       return `
         <circle
@@ -1767,27 +2371,52 @@ function renderEvalGraph(result) {
           r="3.5"
           fill="${fill}"
           data-ply="${p.i}"
-        ></circle>
+          data-move-label="${moveLabel}"
+        >
+          <title>${moveLabel}</title>
+        </circle>
       `;
     })
     .join("");
 
   return `
-    <div class="chartLegend">
-      <span class="legendTop">↑ ${searchedName} advantage</span>
-      <span class="legendBottom">↓ ${opponentName} advantage</span>
-    </div>
+    <div class="evalGraphWrap" title="Hover to enlarge. Click a dot to jump to that move.">
+      <div class="chartLegend">
+        <span class="legendTop">↑ ${searchedName} advantage</span>
+        <span class="legendBottom">↓ ${opponentName} advantage</span>
+      </div>
 
-    <svg class="evalGraph" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
-      <line x1="${pad}" y1="${height / 2}" x2="${width - pad}" y2="${height / 2}"
-        stroke="rgba(255,255,255,0.18)" stroke-width="1" />
-      <polyline points="${line}" fill="none" stroke="#d9dee8" stroke-width="2" />
-      ${dots}
-    </svg>
+      <svg class="evalGraph" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+        <line x1="${pad}" y1="${height / 2}" x2="${width - pad}" y2="${height / 2}"
+          stroke="rgba(255,255,255,0.18)" stroke-width="1" />
+        <polyline points="${line}" fill="none" stroke="#d9dee8" stroke-width="2" />
+        ${dots}
+      </svg>
+    </div>
   `;
 }
 
-function renderQualityRows(stats) {
+function renderQualityCountButton(qualityKey, side, count) {
+  const style = QUALITY_STYLES[qualityKey] || QUALITY_STYLES.good;
+  const disabled = count <= 0 ? "disabled" : "";
+
+  return `
+    <button
+      type="button"
+      class="qualityCountButton"
+      style="color: ${style.color};"
+      data-quality="${qualityKey}"
+      data-side="${side}"
+      ${disabled}
+      title="Jump to first ${style.label} move for ${side}"
+      onclick="jumpToQuality('${qualityKey}', '${side}')"
+    >
+      ${count}
+    </button>
+  `;
+}
+
+function renderQualityRows(stats, side) {
   const order = [
     "Brilliant",
     "Great",
@@ -1803,10 +2432,17 @@ function renderQualityRows(stats) {
 
   return order
     .map(name => {
+      const qualityKey = name.toLowerCase();
+      const count = stats[name] || 0;
+
       return `
-        <tr>
-          <td class="qualityName">${name}</td>
-          <td class="qualityCount">${stats[name] || 0}</td>
+        <tr class="qualityRow">
+          <td class="qualityName">
+            ${name}
+          </td>
+          <td class="qualityCount">
+            ${renderQualityCountButton(qualityKey, side, count)}
+          </td>
         </tr>
       `;
     })
@@ -1891,7 +2527,7 @@ function renderOverview(result) {
           <div class="overviewCardLabel">${leftPlayer.name}</div>
 
           <table class="qualityTable">
-            ${renderQualityRows(leftPlayer.overview.stats)}
+            ${renderQualityRows(leftPlayer.overview.stats, leftColor)}
           </table>
         </div>
 
@@ -1899,7 +2535,7 @@ function renderOverview(result) {
           <div class="overviewCardLabel">${rightPlayer.name}</div>
 
           <table class="qualityTable">
-            ${renderQualityRows(rightPlayer.overview.stats)}
+            ${renderQualityRows(rightPlayer.overview.stats, rightColor)}
           </table>
         </div>
       </div>
@@ -1907,14 +2543,56 @@ function renderOverview(result) {
   `;
 
   container.querySelectorAll(".evalDot").forEach(dot => {
+    dot.style.cursor = "pointer";
+
+    dot.addEventListener("mouseenter", () => {
+      dot.setAttribute("r", "6");
+    });
+
+    dot.addEventListener("mouseleave", () => {
+      dot.setAttribute("r", "3.5");
+    });
+
     dot.addEventListener("click", () => {
       const ply = Number(dot.dataset.ply);
-      window.currentMoveIndex = clamp(ply, 0, window.maxIndex);
-      window.boardApi.position(result.fens[window.currentMoveIndex], true);
-      setActiveTab("moves");
-      updateUI();
+      jumpToMoveIndex(ply - 1);
     });
   });
+}
+
+function getMoveQualityIcon(q) {
+  if (!q) return "";
+
+  if (q.forcedMate) return " →→";
+  if (q.forced) return " →";
+  if (q.type === "brilliant") return " !!";
+  if (q.type === "great") return " !";
+  if (q.type === "book") return " 📖";
+  if (q.type === "miss") return " ❌";
+  if (q.severity === "blunder") return " ??";
+  if (q.severity === "mistake") return " ?";
+  if (q.severity === "inaccuracy") return " ?!";
+
+  return "";
+}
+
+function renderMoveTextWithQuality(moveIndex, san) {
+  if (!san) return "";
+
+  const q = window.moveQualities?.[moveIndex];
+  const qualityKey = q?.type || q?.severity || "good";
+  const style = QUALITY_STYLES[qualityKey] || QUALITY_STYLES.good;
+  const icon = getMoveQualityIcon(q);
+
+  return `
+    <span
+      class="moveQualityText"
+      style="color: ${style.color};"
+      title="${style.label}"
+    >
+      ${san}${icon}
+    </span>
+  `;
 }
 
 // --- UI Rendering ---
@@ -2005,7 +2683,7 @@ window.initAnalysisUI = async function(result) {
 
   result.moves.forEach(m => {
     const mv = temp.move(m, { sloppy: true });
-    uciMoves.push(mv ? mv.from + mv.to : null);
+    uciMoves.push(mv ? mv.from + mv.to + (mv.promotion || "") : null);
   });
 
   window.moveQualities = computeMoveQualities(
@@ -2013,7 +2691,8 @@ window.initAnalysisUI = async function(result) {
     result.moves,
     uciMoves,
     result.fens,
-    bookMap
+    bookMap,
+    openingNameMap
   );
 
   window.openingNameMap = openingNameMap;
@@ -2028,47 +2707,45 @@ window.initAnalysisUI = async function(result) {
 };
 
 function renderMoveTable(result) {
-  // Change "movesList" to "moveList" to match your index.html
-  const list = document.getElementById("moveList"); 
-  if (!list) return; // Safety check
-  
+  const list = document.getElementById("moveList");
+  if (!list) return;
+
   list.innerHTML = "";
+
   const table = document.createElement("table");
-  table.className = "move-table"; // Add the class for your CSS styling
-
-  const getIcon = (q) => {
-  if (!q) return "";
-
-  if (q.forcedMate) return " →→";
-  if (q.forced) return " →";
-  if (q.type === "brilliant") return " !!";
-  if (q.type === "great") return " !";
-  if (q.type === "book") return " 📖";
-  if (q.type === "miss") return " ❌";
-  if (q.severity === "blunder") return " ??";
-  if (q.severity === "mistake") return " ?";
-  if (q.severity === "inaccuracy") return " ?!";
-
-  return "";
-};
+  table.className = "move-table";
 
   for (let i = 0; i < result.moves.length; i += 2) {
+    const moveNumber = i / 2 + 1;
+
+    const whiteMove = result.moves[i];
+    const blackMove = result.moves[i + 1];
+
     const tr = document.createElement("tr");
+
     tr.innerHTML = `
-      <td class="move-num">${(i/2)+1}.</td>
-      <td class="move-cell" data-ply="${i}">${result.moves[i]}${getIcon(window.moveQualities[i])}</td>
-      <td class="move-cell" data-ply="${i+1}">${result.moves[i+1] ? result.moves[i+1] + getIcon(window.moveQualities[i+1]) : ""}</td>
+      <td class="move-num">${moveNumber}.</td>
+
+      <td class="move-cell" data-ply="${i}">
+        ${renderMoveTextWithQuality(i, whiteMove)}
+      </td>
+
+      <td class="move-cell" ${blackMove ? `data-ply="${i + 1}"` : ""}>
+        ${blackMove ? renderMoveTextWithQuality(i + 1, blackMove) : ""}
+      </td>
     `;
+
     table.appendChild(tr);
   }
+
   list.appendChild(table);
 
   list.onclick = (e) => {
-    const c = e.target.closest(".move-cell");
-    if (!c || !c.dataset.ply) return;
-    window.currentMoveIndex = Number(c.dataset.ply) + 1;
-    window.boardApi.position(result.fens[window.currentMoveIndex], true);
-    updateUI();
+    const cell = e.target.closest(".move-cell");
+
+    if (!cell || cell.dataset.ply === undefined) return;
+
+    jumpToMoveIndex(Number(cell.dataset.ply));
   };
 }
 
@@ -2190,6 +2867,10 @@ function createControlButtons() {
     window.currentMoveIndex = 0;
     window.boardApi.position(window.analysisResult.fens[0], true);
     updateUI();
+
+    requestAnimationFrame(() => {
+      resetMoveListScroll();
+    });
   });
 
   b("<", () => {
@@ -2213,4 +2894,23 @@ function createControlButtons() {
     window.boardApi.position(window.analysisResult.fens[window.maxIndex], true);
     updateUI();
   });
+}
+
+function resetMoveListScroll() {
+  const moveList = document.getElementById("moveList");
+  if (!moveList) return;
+
+  // Scroll the move list itself.
+  moveList.scrollTop = 0;
+
+  // Also scroll any parent container that might be the actual scrolling element.
+  let parent = moveList.parentElement;
+
+  while (parent) {
+    if (parent.scrollHeight > parent.clientHeight) {
+      parent.scrollTop = 0;
+    }
+
+    parent = parent.parentElement;
+  }
 }
