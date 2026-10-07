@@ -263,7 +263,10 @@ window.loadGameIntoAnalysis = async function loadGameIntoAnalysis(game, options 
       if (result && typeof window.initAnalysisUI === "function") {
         await window.initAnalysisUI(result);
       } else {
-        alert("Failed to analyze game.");
+        alert(
+          "Failed to analyze game." +
+            (window.lastAnalyzeError ? `\n\n${window.lastAnalyzeError}` : "")
+        );
       }
     } finally {
       if (!options.keepLoading && typeof window.endLoading === "function") {
@@ -375,21 +378,30 @@ window.postData = async function postData(data = {}) {
       body: JSON.stringify(data),
     });
 
+    // Read the body once; a second read (json() then text()) throws.
+    const raw = await response.text();
     let payload;
     try {
-      payload = await response.json();
+      payload = JSON.parse(raw);
     } catch {
-      payload = await response.text();
+      payload = raw;
     }
 
     if (response.ok) {
+      window.lastAnalyzeError = null;
       return payload;
     } else {
       console.error("Error response:", response.status, payload);
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const detail =
+        payload && typeof payload === "object" ? payload.detail : payload;
+      throw new Error(
+        `HTTP ${response.status}${detail ? `: ${String(detail).slice(0, 300)}` : ""}`
+      );
     }
   } catch (error) {
     console.error("Error posting data:", error);
+    // Keep the real reason so callers can show it instead of a generic alert.
+    window.lastAnalyzeError = error && error.message ? error.message : String(error);
     return null;
   }
 };

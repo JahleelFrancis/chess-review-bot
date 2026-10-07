@@ -1,5 +1,7 @@
 import asyncio
 import io
+import sys
+import traceback
 import csv
 import re
 from pathlib import Path
@@ -13,9 +15,17 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+# On Windows, uvicorn --reload can leave asyncio on the Selector loop, which
+# cannot spawn subprocesses (Stockfish). Force the Proactor policy.
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 app = FastAPI()
 
-STOCKFISH_PATH = "stockfish/stockfish-windows-x86-64-avx2/stockfish/stockfish-windows-x86-64-avx2.exe"
+STOCKFISH_PATH = str(
+    Path(__file__).resolve().parent.parent
+    / "stockfish/stockfish-windows-x86-64-avx2/stockfish/stockfish-windows-x86-64-avx2.exe"
+)
 ENGINE_DEPTH = 12
 ENGINE_MULTIPV = 3
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
@@ -596,7 +606,15 @@ async def analyze_game(request: PGNData):
             "evaluations": evaluations,
         }
 
-    return await asyncio.to_thread(run_engine)
+    try:
+        return await asyncio.to_thread(run_engine)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=500, detail=f"Stockfish not found at: {STOCKFISH_PATH}"
+        )
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Engine error: {e!r}")
 
 
 @app.get("/api/opening")

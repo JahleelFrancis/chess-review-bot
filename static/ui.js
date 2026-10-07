@@ -1,6 +1,6 @@
 /*
   ui.js
-  Stable move-quality rollback: removes the aggressive rating-gap label modifier while keeping UI colour/click features.
+  Contextual move-quality tuning: stricter opening book, winning-side forgiveness, and competitive/high-rated strictness.
 
   ui.js
   -----
@@ -20,6 +20,34 @@ const QUALITY_STYLES = {
   miss: { color: "#ff5f6d", label: "Miss" },
   blunder: { color: "#ff3b3b", label: "Blunder" },
 };
+
+// A checkmated position comes back from the engine as "mate 0", which has no
+// sign. initAnalysisUI() tags those evals with `winner` so every consumer can
+// tell who actually delivered mate (otherwise the mating move reads as a blunder).
+function isMateForWhite(ev) {
+  if (!ev) return false;
+  if (ev.value === 0 && ev.winner) return ev.winner === "white";
+  return ev.value > 0;
+}
+
+function formatMateLabel(ev) {
+  return ev.value === 0 ? "#" : `M${Math.abs(ev.value)}`;
+}
+
+function normalizeTerminalMateEvals(result) {
+  const fix = (ev, fen) => {
+    if (!ev || ev.type !== "mate" || ev.value !== 0) return;
+    const sideToMove = String(fen || "").split(" ")[1];
+    // The side to move is the one that has been checkmated.
+    ev.winner = sideToMove === "w" ? "black" : "white";
+  };
+
+  (result.evaluations || []).forEach((ev, i) => {
+    const fen = result.fens?.[i];
+    fix(ev, fen);
+    (ev?.lines || []).forEach((line) => fix(line, fen));
+  });
+}
 
 function getMoveSideFromIndex(index) {
   return index % 2 === 0 ? "white" : "black";
@@ -648,31 +676,33 @@ function adjustEstimatedRatingsByResult(whiteOverview, blackOverview) {
   const whiteWon = meta.whiteResult === "win";
   const blackWon = meta.blackResult === "win";
 
-  if (!whiteWon && !blackWon) return;
+  if (!whiteWon && !blackWon) {
+    whiteOverview.estimatedRating = roundEstimatedRating(whiteOverview.estimatedRating);
+    blackOverview.estimatedRating = roundEstimatedRating(blackOverview.estimatedRating);
+    return;
+  }
 
   const winner = whiteWon ? whiteOverview : blackOverview;
   const loser = whiteWon ? blackOverview : whiteOverview;
 
   const accuracyGap = winner.accuracy - loser.accuracy;
 
-  // If winner has similar or better accuracy, winner should clearly rate higher.
-  if (accuracyGap > -3 && winner.estimatedRating <= loser.estimatedRating) {
-    const midpoint = Math.round(
-      (winner.estimatedRating + loser.estimatedRating) / 2
-    );
-
-    winner.estimatedRating = midpoint + 75;
-    loser.estimatedRating = midpoint - 75;
+  // Only force the winner higher if their accuracy was basically equal or better.
+  // If the loser clearly played cleaner, let that show.
+  if (accuracyGap > -2 && winner.estimatedRating < loser.estimatedRating) {
+    const midpoint = (winner.estimatedRating + loser.estimatedRating) / 2;
+    winner.estimatedRating = midpoint + 50;
+    loser.estimatedRating = midpoint - 50;
   }
 
-  // If loser had much better accuracy, allow loser to stay higher,
-  // but not by a huge amount.
-  if (accuracyGap <= -3 && loser.estimatedRating - winner.estimatedRating > 120) {
-    loser.estimatedRating = winner.estimatedRating + 120;
+  // If loser had much better accuracy, they can have a higher game rating,
+  // but do not let it get silly.
+  if (accuracyGap <= -2 && loser.estimatedRating - winner.estimatedRating > 200) {
+    loser.estimatedRating = winner.estimatedRating + 200;
   }
 
-  winner.estimatedRating = clamp(winner.estimatedRating, 100, 3800);
-  loser.estimatedRating = clamp(loser.estimatedRating, 100, 3800);
+  winner.estimatedRating = roundEstimatedRating(winner.estimatedRating);
+  loser.estimatedRating = roundEstimatedRating(loser.estimatedRating);
 }
 
 function fenPositionKey(fen) {
@@ -1012,42 +1042,71 @@ function shouldAllowGreatPromotion(q, moves, index) {
   const topMoveGap = getTopMoveGap(q);
   const beforeCp = getCp(q, "beforeCpPlayer");
   const afterCp = getCp(q, "afterCpPlayer");
+  const improvement = afterCp - beforeCp;
 
   const isNearBest =
-    evalLoss <= 45 &&
+    evalLoss <= 35 &&
+    epLoss <= 0.035;
+
+  const isOnlyMoveClean =
+    evalLoss <= 70 &&
     epLoss <= 0.045;
 
-  if (!isNearBest) return false;
+  if (!isNearBest && !isOnlyMoveClean) return false;
 
   const routineRecapture = isLikelyRoutineRecapture(moves, index);
   if (routineRecapture) return false;
 
   const actualSacrifice = isActualSacrifice(q);
 
+  const alreadyCompletelyWinning =
+    beforeCp > 550 &&
+    afterCp > 550;
+
+  // Great moves should usually happen while the position still has tension.
+  // Do not mark normal conversion moves as Great just because Stockfish likes them.
+  if (alreadyCompletelyWinning && !actualSacrifice && q?.likelyGreatMove !== true) {
+    return false;
+  }
+
   const savesBadPosition =
-    beforeCp < -80 &&
-    afterCp > beforeCp + 120;
+    beforeCp < -100 &&
+    improvement >= 150 &&
+    afterCp > -700;
 
   const findsBigOnlyMove =
-    topMoveGap >= 120;
+    topMoveGap >= 240 &&
+    beforeCp > -550 &&
+    beforeCp < 550 &&
+    afterCp >= -200;
 
   const improvesClearly =
-    afterCp > beforeCp + 80;
+    improvement >= 180 &&
+    beforeCp < 400 &&
+    afterCp > -150;
 
-  const alreadyCompletelyWinning =
-    beforeCp > 650 &&
-    afterCp > 650;
+  const explicitLikelyGreat =
+    q?.likelyGreatMove === true &&
+    (topMoveGap >= 180 || improvement >= 150 || savesBadPosition);
 
-  if (alreadyCompletelyWinning && !actualSacrifice) return false;
-
-  // Captures are common. Do not auto-upgrade normal captures just because
-  // they are engine best. They need extra context.
+  // Captures and checks are common. They need extra separation/context.
   if (isCaptureSan(san)) {
     return (
       actualSacrifice ||
       savesBadPosition ||
+      topMoveGap >= 260 ||
       improvesClearly ||
-      topMoveGap >= 180
+      explicitLikelyGreat
+    );
+  }
+
+  if (isCheckSan(san)) {
+    return (
+      actualSacrifice ||
+      savesBadPosition ||
+      topMoveGap >= 260 ||
+      improvesClearly ||
+      explicitLikelyGreat
     );
   }
 
@@ -1055,7 +1114,7 @@ function shouldAllowGreatPromotion(q, moves, index) {
     savesBadPosition ||
     findsBigOnlyMove ||
     improvesClearly ||
-    q?.likelyGreatMove === true
+    explicitLikelyGreat
   );
 }
 
@@ -1096,6 +1155,399 @@ function applyStrictSpecialMovePromotions(qualities, moves) {
   return qualities;
 }
 
+function greatMoveScore(q) {
+  if (!q) return 0;
+
+  const evalLoss = getEvalLoss(q);
+  const epLoss = getEpLoss(q);
+  const topMoveGap = getTopMoveGap(q);
+  const beforeCp = getCp(q, "beforeCpPlayer");
+  const afterCp = getCp(q, "afterCpPlayer");
+  const improvement = afterCp - beforeCp;
+
+  let score = 0;
+
+  score += topMoveGap;
+  score += Math.max(0, improvement) * 0.65;
+
+  if (q.likelyGreatMove === true) score += 110;
+  if (q.savedPosition === true) score += 140;
+  if (isActualSacrifice(q)) score += 120;
+  if (q.givesCheck) score += 25;
+  if (q.isCapture) score += 15;
+
+  if (evalLoss > 70 || epLoss > 0.055) score -= 140;
+  if (beforeCp > 550 && afterCp > 550 && !q.savedPosition && !isActualSacrifice(q)) score -= 180;
+  if (Math.abs(afterCp) >= 9000 && topMoveGap < 120 && q.likelyGreatMove !== true) score -= 220;
+
+  return score;
+}
+
+
+function bestDisplayScore(q) {
+  if (!q) return 0;
+
+  const evalLoss = getEvalLoss(q);
+  const epLoss = getEpLoss(q);
+  const topMoveGap = getTopMoveGap(q);
+  const beforeCp = getCp(q, "beforeCpPlayer");
+  const afterCp = getCp(q, "afterCpPlayer");
+  const improvement = afterCp - beforeCp;
+  const context = q.positionContext || {};
+
+  let score = 0;
+
+  score += topMoveGap;
+  score += Math.max(0, improvement) * 0.35;
+
+  if (context.competitive) score += 35;
+  if (q.likelyGreatMove) score += 80;
+  if (q.givesCheck) score += 22;
+  if (q.isCapture) score += 16;
+  if (q.forced) score += 200;
+
+  // A top engine move in a totally winning cleanup position is often just
+  // Excellent on Chess.com, not automatically Best.
+  if (context.winning && context.keepsWin && !q.givesCheck && !q.isCapture) {
+    score -= 45;
+  }
+
+  if (evalLoss > 40 || epLoss > 0.025) score -= 55;
+
+  return score;
+}
+
+function normalizeRoutineBestMoveCounts(qualities) {
+  if (!Array.isArray(qualities)) return qualities;
+
+  const bySide = { white: [], black: [] };
+  const moveCountsBySide = { white: 0, black: 0 };
+
+  for (let i = 0; i < qualities.length; i++) {
+    const q = qualities[i];
+    if (!q || q.type === "book") continue;
+
+    const side = i % 2 === 0 ? "white" : "black";
+    moveCountsBySide[side] += 1;
+
+    if (q.type === "best" && !q.forced) {
+      bySide[side].push({ index: i, q, score: bestDisplayScore(q) });
+    }
+  }
+
+  const demoteBest = (q) => {
+    q.type = "excellent";
+    q.severity = null;
+  };
+
+  for (const side of ["white", "black"]) {
+    const candidates = bySide[side];
+    if (!candidates.length) continue;
+
+    candidates.forEach((item) => {
+      const q = item.q;
+      const context = q.positionContext || {};
+      const ratingBand = context.ratingBand || "mid";
+      const topMoveGap = getTopMoveGap(q);
+      const evalLoss = getEvalLoss(q);
+      const epLoss = getEpLoss(q);
+
+      const quietTopMove =
+        !q.givesCheck &&
+        !q.isCapture &&
+        !q.likelyGreatMove;
+
+      const routineWinningCleanup =
+        context.winning &&
+        context.keepsWin &&
+        quietTopMove &&
+        topMoveGap < 120 &&
+        evalLoss <= 70 &&
+        epLoss <= 0.035;
+
+      const lowRatedRoutineTop =
+        ratingBand === "low" &&
+        quietTopMove &&
+        topMoveGap < 95 &&
+        evalLoss <= 55 &&
+        epLoss <= 0.030;
+
+      const midRatedRoutineCleanup =
+        ratingBand === "mid" &&
+        routineWinningCleanup &&
+        topMoveGap < 65;
+
+      const highRatedDeadCleanup =
+        ratingBand === "high" &&
+        routineWinningCleanup &&
+        !context.competitive &&
+        topMoveGap < 35;
+
+      if (lowRatedRoutineTop || midRatedRoutineCleanup || highRatedDeadCleanup) {
+        demoteBest(q);
+      }
+    });
+
+    const stillBest = candidates
+      .filter((item) => item.q.type === "best")
+      .sort((a, b) => b.score - a.score);
+
+    // Low-rated games were getting flooded with Best moves because every quiet
+    // Stockfish top move was counted. Cap only the low/mid bands; high-rated
+    // games are allowed to have more true Best moves.
+    const sampleBand =
+      stillBest[0]?.q?.positionContext?.ratingBand ||
+      candidates[0]?.q?.positionContext?.ratingBand ||
+      "mid";
+
+    let maxBest = Infinity;
+    if (sampleBand === "low") {
+      maxBest = moveCountsBySide[side] >= 45 ? 12 : 9;
+    } else if (sampleBand === "mid") {
+      maxBest = moveCountsBySide[side] >= 45 ? 14 : 10;
+    }
+
+    stillBest.forEach((item, rank) => {
+      if (rank >= maxBest) demoteBest(item.q);
+    });
+  }
+
+  return qualities;
+}
+
+function normalizeGreatMoveCounts(qualities) {
+  if (!Array.isArray(qualities)) return qualities;
+
+  const candidatesBySide = { white: [], black: [] };
+  const moveCountsBySide = { white: 0, black: 0 };
+
+  for (let i = 0; i < qualities.length; i++) {
+    const q = qualities[i];
+    if (!q || q.type === "book") continue;
+
+    const side = i % 2 === 0 ? "white" : "black";
+    moveCountsBySide[side] += 1;
+
+    if (q.type === "great") {
+      candidatesBySide[side].push({ index: i, q, score: greatMoveScore(q) });
+    }
+  }
+
+  for (const side of ["white", "black"]) {
+    const candidates = candidatesBySide[side];
+    if (!candidates.length) continue;
+
+    // Chess.com-style Great moves are highlights, not every clean tactic.
+    // Keep only strong candidates, then cap the count per side.
+    const minScore = 150;
+    const maxGreats = moveCountsBySide[side] >= 45 ? 5 : 4;
+
+    candidates.sort((a, b) => b.score - a.score);
+
+    candidates.forEach((item, rank) => {
+      if (item.score < minScore || rank >= maxGreats) {
+        const q = item.q;
+        const evalLoss = getEvalLoss(q);
+        const epLoss = getEpLoss(q);
+
+        if (evalLoss <= 25 && epLoss <= 0.025) {
+          q.type = "best";
+        } else if (evalLoss <= 70 && epLoss <= 0.055) {
+          q.type = "excellent";
+        } else {
+          q.type = "good";
+        }
+
+        q.severity = null;
+        q.likelyGreatMove = false;
+      }
+    });
+  }
+
+  return qualities;
+}
+
+
+function normalizeExcellentAndSoftErrorBalance(qualities) {
+  if (!Array.isArray(qualities)) return qualities;
+
+  const bySide = { white: [], black: [] };
+
+  for (let i = 0; i < qualities.length; i++) {
+    const q = qualities[i];
+    if (!q || q.type === "book") continue;
+
+    const side = i % 2 === 0 ? "white" : "black";
+    bySide[side].push({ index: i, q });
+  }
+
+  const setType = (q, type) => {
+    q.type = type;
+    q.severity = BAD_MOVE_TYPES.has(type) ? type : null;
+  };
+
+  const isTopOrNear = (q) => {
+    const idx = Number(q.playedTopLineIndex);
+    return Number.isFinite(idx) && idx >= 0 && idx <= 2;
+  };
+
+  const isWinningConversion = (q) => {
+    const beforeCp = getCp(q, "beforeCpPlayer");
+    const afterCp = getCp(q, "afterCpPlayer");
+    const epLoss = getEpLoss(q);
+    const evalLoss = getEvalLoss(q);
+
+    return (
+      beforeCp >= 450 &&
+      afterCp >= 300 &&
+      epLoss <= 0.080 &&
+      evalLoss <= 210
+    );
+  };
+
+  // First undo the biggest overcorrection: safe winning conversions should not
+  // become random Inaccuracies/Mistakes unless they actually throw the win away.
+  for (const side of ["white", "black"]) {
+    for (const { q } of bySide[side]) {
+      if (!q || q.type === "book") continue;
+      if (!["inaccuracy", "mistake"].includes(q.type)) continue;
+
+      const epLoss = getEpLoss(q);
+      const evalLoss = getEvalLoss(q);
+      const beforeCp = getCp(q, "beforeCpPlayer");
+      const afterCp = getCp(q, "afterCpPlayer");
+      const context = q.positionContext || {};
+
+      const keepsLargeWin =
+        isWinningConversion(q) &&
+        context.keepsWin !== false &&
+        afterCp >= beforeCp - 210;
+
+      if (keepsLargeWin) {
+        if (beforeCp >= 750 && afterCp >= 550 && epLoss <= 0.050 && evalLoss <= 140) {
+          setType(q, "excellent");
+        } else {
+          setType(q, "good");
+        }
+      }
+    }
+  }
+
+  // Then stop Excellent from swallowing the whole game. Chess.com uses Excellent
+  // for clean moves, but it still downgrades the weaker clean moves to Good or
+  // Inaccuracy, especially when the player has many other errors in the game.
+  for (const side of ["white", "black"]) {
+    const moves = bySide[side];
+    if (!moves.length) continue;
+
+    const sampleBand =
+      moves.find(({ q }) => q?.positionContext?.ratingBand)?.q?.positionContext?.ratingBand ||
+      "mid";
+
+    const badCount = moves.filter(({ q }) => BAD_MOVE_TYPES.has(q?.type)).length;
+    const excellent = moves.filter(({ q }) => q?.type === "excellent");
+
+    let maxExcellentRatio;
+    if (sampleBand === "high") {
+      maxExcellentRatio = badCount >= 6 ? 0.38 : 0.44;
+    } else if (sampleBand === "mid") {
+      maxExcellentRatio = badCount >= 7 ? 0.40 : 0.48;
+    } else {
+      maxExcellentRatio = badCount >= 8 ? 0.36 : 0.49;
+    }
+
+    // Short games should not be forced into a tiny number of Excellents.
+    const minExcellent = moves.length >= 45 ? 8 : 4;
+    const maxExcellent = Math.max(minExcellent, Math.ceil(moves.length * maxExcellentRatio));
+    const excess = excellent.length - maxExcellent;
+
+    if (excess <= 0) continue;
+
+    excellent
+      .map(({ index, q }) => {
+        const epLoss = getEpLoss(q);
+        const evalLoss = getEvalLoss(q);
+        const topMoveGap = getTopMoveGap(q);
+        const beforeCp = getCp(q, "beforeCpPlayer");
+        const afterCp = getCp(q, "afterCpPlayer");
+        const context = q.positionContext || {};
+
+        let score = 0;
+        score += epLoss * 1000;
+        score += evalLoss * 0.45;
+        score += Math.max(0, beforeCp - afterCp) * 0.05;
+        if (!isTopOrNear(q)) score += 18;
+        if (context.competitive) score += 10;
+        if (context.winning && !context.keepsWin) score += 16;
+        if (q.isCapture) score -= 8;
+        if (q.givesCheck) score -= 6;
+        if (q.likelyGreatMove) score -= 20;
+
+        return { index, q, score };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, excess)
+      .forEach(({ q }) => {
+        const epLoss = getEpLoss(q);
+        const evalLoss = getEvalLoss(q);
+        const context = q.positionContext || {};
+        const highRated = context.ratingBand === "high";
+        const competitive = context.competitive === true;
+
+        if (
+          highRated &&
+          competitive &&
+          (epLoss >= 0.090 || evalLoss >= 170)
+        ) {
+          setType(q, "mistake");
+        } else if (
+          (highRated && competitive && (epLoss >= 0.052 || evalLoss >= 115)) ||
+          (epLoss >= 0.045 && evalLoss >= 60) ||
+          epLoss >= 0.060 ||
+          evalLoss >= 135
+        ) {
+          setType(q, "inaccuracy");
+        } else {
+          setType(q, "good");
+        }
+      });
+  }
+
+  // Finally tighten high-rated competitive middlegames. At that level, a real
+  // 0.06-0.12 expected-point drop should rarely stay Good/Excellent.
+  for (const side of ["white", "black"]) {
+    for (const { q } of bySide[side]) {
+      if (!q || q.type === "book") continue;
+
+      const context = q.positionContext || {};
+      if (context.ratingBand !== "high" || context.competitive !== true) continue;
+      if (isWinningConversion(q)) continue;
+
+      const epLoss = getEpLoss(q);
+      const evalLoss = getEvalLoss(q);
+      const beforeCp = getCp(q, "beforeCpPlayer");
+      const afterCp = getCp(q, "afterCpPlayer");
+      const drop = beforeCp - afterCp;
+
+      if (["best", "great", "brilliant"].includes(q.type)) continue;
+
+      if (
+        ["excellent", "good", "inaccuracy"].includes(q.type) &&
+        (epLoss >= 0.105 || evalLoss >= 190 || drop >= 260)
+      ) {
+        setType(q, "mistake");
+      } else if (
+        ["excellent", "good"].includes(q.type) &&
+        (epLoss >= 0.055 || evalLoss >= 115 || drop >= 170)
+      ) {
+        setType(q, "inaccuracy");
+      }
+    }
+  }
+
+  return qualities;
+}
+
 
 function computeMoveQualities(evals, moves, uciMoves, fens, bookMap, openingNameMap = {}) {
   const qualities = [];
@@ -1109,7 +1561,7 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap, openingName
     if (!e) return 0;
 
     if (e.type === "mate") {
-      return e.value > 0 ? 10000 : -10000;
+      return isMateForWhite(e) ? 10000 : -10000;
     }
 
     return Number(e.value || 0);
@@ -1156,8 +1608,12 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap, openingName
     const beforeCpPlayer = getPlayerCp(before, playerMultiplier);
     const afterCpPlayer = getPlayerCp(after, playerMultiplier);
 
-    const evalLoss = Math.max(0, beforeCpPlayer - afterCpPlayer);
-    const evalGain = Math.max(0, afterCpPlayer - beforeCpPlayer);
+    // Cap at the same +/-1200 the expected-points curve uses, so a mate score
+    // counts as "completely winning/losing" rather than a 10,000 cp swing.
+    // The uncapped before/afterCpPlayer are still used for mate detection.
+    const capForLoss = (cp) => clampNumber(cp, -1200, 1200);
+    const evalLoss = Math.max(0, capForLoss(beforeCpPlayer) - capForLoss(afterCpPlayer));
+    const evalGain = Math.max(0, capForLoss(afterCpPlayer) - capForLoss(beforeCpPlayer));
 
     const beforeEP = expectedPoints(beforeCpPlayer, playerRating);
     const afterEP = expectedPoints(afterCpPlayer, playerRating);
@@ -1213,19 +1669,23 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap, openingName
       i >= 2 &&
       qualities[i - 2]?.type === "book";
 
+    const bookSequenceStillConnected =
+      moveNumber <= 2 ||
+      previousPlyWasBook ||
+      previousOwnMoveWasBook;
+
     const openingBookChainActive =
       moveNumber <= 5 &&
+      bookSequenceStillConnected &&
       (
         isListedBookMove ||
         isKnownOpeningPosition ||
-        previousPlyWasBook ||
-        previousOwnMoveWasBook ||
         moveNumber <= 2
       );
 
     const isLowRiskOpeningMove =
-      evalLoss <= 100 &&
-      epLoss <= 0.055 &&
+      evalLoss <= 75 &&
+      epLoss <= 0.045 &&
       (
         isTopMove ||
         isNearTopMove ||
@@ -1233,17 +1693,23 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap, openingName
         openingBookChainActive
       );
 
+    // Book has to be a connected opening line, not just "a quiet move that the
+    // opening endpoint still knows somewhere". This prevents the fifth/sixth
+    // normal developing move from being protected as Book in every game.
     const isEarlyKnownOpeningMove =
-      moveNumber <= 5 &&
+      moveNumber <= 2 &&
       openingBookChainActive &&
       isLowRiskOpeningMove;
 
+    const isStrictListedBookMove =
+      isListedBookMove &&
+      moveNumber <= 5 &&
+      bookSequenceStillConnected &&
+      isLowRiskOpeningMove;
+
     const isBook =
-      moveNumber <= 12 &&
-      (
-        isListedBookMove ||
-        isEarlyKnownOpeningMove
-      );
+      isEarlyKnownOpeningMove ||
+      isStrictListedBookMove;
 
     const isCheckResponse =
       i > 0 &&
@@ -1265,7 +1731,7 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap, openingName
       if (!line) return null;
 
       if (line.type === "mate") {
-        return line.value > 0
+        return isMateForWhite(line)
           ? 10000 * playerMultiplier
           : -10000 * playerMultiplier;
       }
@@ -1673,6 +2139,53 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap, openingName
       brilliantReason = null;
     }
 
+    const isHighRatedPlayer = playerRating >= 1350;
+    const isLowRatedPlayer = playerRating < 700;
+
+    const contextBeforeMateForPlayer =
+      beforeCpPlayer >= 9000;
+
+    const contextAfterMateAgainstPlayer =
+      afterCpPlayer <= -9000;
+
+    const contextWinning =
+      contextBeforeMateForPlayer ||
+      beforeCpPlayer >= 500 ||
+      beforeEP >= 0.82;
+
+    const contextClearlyBetter =
+      beforeCpPlayer >= 250 ||
+      beforeEP >= 0.68;
+
+    const contextRemainsWinning =
+      afterCpPlayer >= 350 ||
+      afterEP >= 0.74;
+
+    const contextStillPlayableAfter =
+      afterCpPlayer > -650 &&
+      afterEP > 0.10;
+
+    const contextCompetitive =
+      beforeCpPlayer > -450 &&
+      beforeCpPlayer < 650 &&
+      beforeEP > 0.12 &&
+      beforeEP < 0.90;
+
+    const conversionKeepsAWin =
+      !contextAfterMateAgainstPlayer &&
+      contextWinning &&
+      contextRemainsWinning &&
+      evalLoss <= 180 &&
+      epLoss <= 0.075;
+
+    const conversionStaysComfortable =
+      !contextAfterMateAgainstPlayer &&
+      contextClearlyBetter &&
+      contextStillPlayableAfter &&
+      afterCpPlayer >= 150 &&
+      evalLoss <= 230 &&
+      epLoss <= 0.090;
+
     let type = "good";
     let sev = null;
 
@@ -1696,12 +2209,28 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap, openingName
       type = likelyGreatMove ? "great" : "best";
     }
 
+    // Excellent is decided by how little the move loses, not by whether it
+    // happened to rank in Stockfish's top 3 lines (a 4th-ranked move losing
+    // 0.017 EP is just as good as a 3rd-ranked move losing 0.017 EP).
+    // (Never when the move throws away a forced mate: capped at +/-1200 a
+    // mate and a +13 position look identical to the loss maths.)
     else if (
-      isNearTopMove &&
       epLoss <= 0.025 &&
-      evalLoss <= 80
+      evalLoss <= 80 &&
+      !(beforeCpPlayer >= 9000 && afterCpPlayer < 9000)
     ) {
       type = likelyGreatMove ? "great" : "excellent";
+    }
+
+    // Chess.com is noticeably more forgiving when the player is converting a
+    // clearly winning position and the move keeps that win intact. Without this,
+    // harmless +6 -> +4 conversion moves become fake Inaccuracies/Mistakes.
+    else if (conversionKeepsAWin) {
+      type = epLoss <= 0.045 && evalLoss <= 120 ? "excellent" : "good";
+    }
+
+    else if (conversionStaysComfortable && isLowRatedPlayer) {
+      type = "good";
     }
 
     else {
@@ -1746,6 +2275,37 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap, openingName
         afterCpPlayer >= -450 &&
         afterEP >= 0.12;
 
+      const conversionForgivenessApplies =
+        conversionKeepsAWin ||
+        (
+          isLowRatedPlayer &&
+          conversionStaysComfortable
+        );
+
+      const highRatedCompetitiveMistake =
+        isHighRatedPlayer &&
+        positionStillCompetitive &&
+        !beforeWinning &&
+        beforePlayable &&
+        !isTopMove &&
+        evalLoss >= 115 &&
+        epLoss >= 0.040 &&
+        (
+          topMoveGap >= 35 ||
+          afterCpPlayer <= beforeCpPlayer - 110
+        );
+
+      const highRatedCompetitiveInaccuracy =
+        isHighRatedPlayer &&
+        positionStillCompetitive &&
+        !isTopMove &&
+        evalLoss >= 60 &&
+        epLoss >= 0.026 &&
+        (
+          topMoveGap >= 25 ||
+          afterCpPlayer <= beforeCpPlayer - 70
+        );
+
       // Miss = failed to take a clear chance, but did not instantly destroy the game.
       const missedForcedMate =
         !isTopMove &&
@@ -1787,9 +2347,12 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap, openingName
         );
 
       // Blunder = move destroys a playable/winning game.
+      // Allowing mate from an already-lost position costs almost no expected
+      // points, so it should not automatically be a blunder.
       const walksIntoMate =
         !alreadyCompletelyLost &&
-        afterMateAgainstPlayer;
+        afterMateAgainstPlayer &&
+        epLoss >= thresholds.mistake;
 
       const playableToLost =
         !alreadyCompletelyLost &&
@@ -1854,7 +2417,9 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap, openingName
       const isMistake =
         !isBlunder &&
         !isMissOpportunity &&
+        !conversionForgivenessApplies &&
         (
+          highRatedCompetitiveMistake ||
           epLoss >= mistakeFloor ||
           (evalLoss >= 220 && epLoss >= 0.055) ||
           (evalLoss >= 130 && epLoss >= 0.085) ||
@@ -1873,94 +2438,106 @@ function computeMoveQualities(evals, moves, uciMoves, fens, bookMap, openingName
       // Good gets checked BEFORE inaccuracy.
       // This catches harmless suboptimal moves that Chess.com usually calls Good.
       const quietMove =
-  !givesCheck &&
-  !isCapture &&
-  !winsOrPressuresMaterial &&
-  topMoveGap < 140;
+        !givesCheck &&
+        !isCapture &&
+        !winsOrPressuresMaterial &&
+        topMoveGap < 140;
 
-const stillPlayableAfter =
-  afterCpPlayer > -650 &&
-  afterEP > 0.10;
+      const stillPlayableAfter =
+        afterCpPlayer > -650 &&
+        afterEP > 0.10;
 
-// This is now much stricter.
-// It only forgives genuinely harmless quiet moves.
-// The old version was letting 0.06–0.07 EP losses become Good too often.
-const softErrorShouldBeForgiven =
-  quietMove &&
-  stillPlayableAfter &&
-  epLoss < 0.055 &&
-  evalLoss < 95 &&
-  topMoveGap <= 35 &&
-  !beforeWinning &&
-  !createsBigSwing;
+      // Only forgive genuinely harmless quiet moves. This keeps random 0.06 EP
+      // losses from becoming Good in competitive/high-rated games.
+      const softErrorShouldBeForgiven =
+        quietMove &&
+        stillPlayableAfter &&
+        epLoss < 0.055 &&
+        evalLoss < 95 &&
+        topMoveGap <= 35 &&
+        !beforeWinning &&
+        !createsBigSwing &&
+        !highRatedCompetitiveInaccuracy;
 
-// This is the important new middle zone.
-// These are not always mistakes, but they should not be called Good either.
-const quietMoveHasRealCost =
-  quietMove &&
-  stillPlayableAfter &&
-  (
-    epLoss >= 0.058 ||
-    evalLoss >= 100 ||
-    topMoveGap >= 45 ||
-    afterCpPlayer <= -300
-  );
+      // Middle zone: not always a Mistake, but too costly for Good.
+      const quietMoveHasRealCost =
+        quietMove &&
+        stillPlayableAfter &&
+        (
+          epLoss >= 0.058 ||
+          evalLoss >= 100 ||
+          topMoveGap >= 45 ||
+          afterCpPlayer <= -300 ||
+          highRatedCompetitiveInaccuracy
+        );
 
-// Good should be for small, playable losses.
-// It should not absorb every quiet move.
-const isGoodButNotBest =
-  !isBlunder &&
-  !isMissOpportunity &&
-  !isMistake &&
-  !quietMoveHasRealCost &&
-  afterCpPlayer > -650 &&
-  (
-    (
-      epLoss < Math.max(thresholds.inaccuracy * 0.9, 0.045) &&
-      evalLoss < 90 &&
-      (
-        isNearTopMove ||
-        topMoveGap <= 70 ||
-        epLoss < 0.03 ||
-        evalLoss < 55
-      )
-    ) ||
-    softErrorShouldBeForgiven
-  );
+      // Good should be for small playable losses or safe winning conversions.
+      const isGoodButNotBest =
+        !isBlunder &&
+        !isMissOpportunity &&
+        !isMistake &&
+        afterCpPlayer > -650 &&
+        (
+          conversionForgivenessApplies ||
+          (
+            !quietMoveHasRealCost &&
+            epLoss < Math.max(thresholds.inaccuracy * 0.9, 0.045) &&
+            evalLoss < 90 &&
+            (
+              isNearTopMove ||
+              topMoveGap <= 70 ||
+              epLoss < 0.03 ||
+              evalLoss < 55
+            )
+          ) ||
+          softErrorShouldBeForgiven
+        );
 
-const inaccuracyFloor =
-  Math.max(thresholds.inaccuracy * 0.95, 0.055);
+      const inaccuracyFloor =
+        Math.max(thresholds.inaccuracy * 0.95, isHighRatedPlayer ? 0.045 : 0.055);
 
-const inaccuracyHasConsequence =
-  quietMoveHasRealCost ||
-  topMoveGap >= 55 ||
-  evalLoss >= 100 ||
-  afterCpPlayer <= -300 ||
-  (
-    beforeClearlyBetter &&
-    afterCpPlayer < beforeCpPlayer - 80
-  );
+      const inaccuracyHasConsequence =
+        quietMoveHasRealCost ||
+        highRatedCompetitiveInaccuracy ||
+        topMoveGap >= 55 ||
+        evalLoss >= 100 ||
+        afterCpPlayer <= -300 ||
+        (
+          beforeClearlyBetter &&
+          afterCpPlayer < beforeCpPlayer - 80
+        );
 
-const isInaccuracy =
-  !isBlunder &&
-  !isMissOpportunity &&
-  !isMistake &&
-  !isGoodButNotBest &&
-  (
-    (
-      epLoss >= inaccuracyFloor &&
-      inaccuracyHasConsequence
-    ) ||
-    (
-      evalLoss >= 120 &&
-      epLoss >= 0.04
-    ) ||
-    (
-      beforeClearlyBetter &&
-      evalLoss >= 90 &&
-      epLoss >= 0.035
-    )
-  );
+      // Expected points are flat in lost positions, so hanging mate there barely
+      // registers. Still never call it Good/Excellent unless the game was already
+      // totally lost or the move was the engine's top choice.
+      const allowsAvoidableMate =
+        afterMateAgainstPlayer &&
+        beforeCpPlayer > -9000 &&
+        !alreadyCompletelyLost &&
+        !isTopMove;
+
+      const isInaccuracy =
+        !isBlunder &&
+        !isMissOpportunity &&
+        !isMistake &&
+        !isGoodButNotBest &&
+        !conversionForgivenessApplies &&
+        (
+          allowsAvoidableMate ||
+          (
+            epLoss >= inaccuracyFloor &&
+            inaccuracyHasConsequence
+          ) ||
+          (
+            evalLoss >= 120 &&
+            epLoss >= 0.04
+          ) ||
+          (
+            beforeClearlyBetter &&
+            evalLoss >= 90 &&
+            epLoss >= 0.035
+          )
+        );
 
       if (isBlunder) {
         type = "blunder";
@@ -2020,6 +2597,13 @@ const isInaccuracy =
       playedTopLineIndex,
       topMoveGap,
       likelyGreatMove,
+      positionContext: {
+        ratingBand: isLowRatedPlayer ? "low" : isHighRatedPlayer ? "high" : "mid",
+        competitive: contextCompetitive,
+        winning: contextWinning,
+        keepsWin: conversionKeepsAWin,
+        comfortable: conversionStaysComfortable,
+      },
 
       isCheckResponse,
       isKingMove,
@@ -2042,6 +2626,14 @@ const isInaccuracy =
 
   applyStrictSpecialMovePromotions(qualities, movesForPromotion);
 
+  for (let i = 0; i < qualities.length; i++) {
+    qualities[i] = applyMoveQualitySanityCheck(qualities[i]);
+  }
+
+  normalizeRoutineBestMoveCounts(qualities);
+  normalizeGreatMoveCounts(qualities);
+  normalizeExcellentAndSoftErrorBalance(qualities);
+
   qualities.forEach((q, i) => {
     if (!q) return;
 
@@ -2061,57 +2653,394 @@ const isInaccuracy =
   return qualities;
 }
 
+window.dumpMoveDebug = function dumpMoveDebug() {
+  const result = window.analysisResult || {};
+  const qualities = window.moveQualities || [];
+  const rows = qualities.map((q, i) => ({
+    ply: i + 1,
+    move: result.moves?.[i] || "",
+    side: i % 2 === 0 ? "white" : "black",
+    type: q?.type,
+    scoringType: q?.scoringType || q?.type,
+    evalLoss: Number(q?.evalLoss || 0).toFixed(0),
+    epLoss: Number(q?.epLoss || 0).toFixed(3),
+    topMoveGap: Number(q?.topMoveGap || 0).toFixed(0),
+    beforeCp: Number(q?.beforeCpPlayer || 0).toFixed(0),
+    afterCp: Number(q?.afterCpPlayer || 0).toFixed(0),
+    context: q?.positionContext
+      ? JSON.stringify(q.positionContext)
+      : "",
+  }));
+
+  console.table(rows);
+  return rows;
+};
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
 function qualityDisplayName(type, severity) {
-  if (type === "brilliant") return "Brilliant";
-  if (type === "great") return "Great";
-  if (type === "best") return "Best";
-  if (type === "excellent") return "Excellent";
-  if (type === "book") return "Book";
-  if (type === "good") return "Good";
-  if (severity === "inaccuracy") return "Inaccuracy";
-  if (severity === "mistake") return "Mistake";
-  if (severity === "miss") return "Miss";
-  if (severity === "blunder") return "Blunder";
+  const key = severity || type;
+
+  if (key === "brilliant") return "Brilliant";
+  if (key === "great") return "Great";
+  if (key === "best") return "Best";
+  if (key === "excellent") return "Excellent";
+  if (key === "book") return "Book";
+  if (key === "good") return "Good";
+  if (key === "inaccuracy") return "Inaccuracy";
+  if (key === "mistake") return "Mistake";
+  if (key === "miss") return "Miss";
+  if (key === "blunder") return "Blunder";
+
   return "Good";
+}
+
+
+function applyMoveQualitySanityCheck(q) {
+  if (!q || !q.type) return q;
+
+  const out = { ...q };
+
+  // Preserve the original type for accuracy/rating math.
+  // The sanity check can change the displayed label without wrecking accuracy.
+  out.scoringType = out.scoringType || out.type;
+  out.scoringSeverity = out.scoringSeverity || out.severity;
+
+  if (out.type === "book") return out;
+
+  const epLoss = Math.max(0, Number(out.epLoss ?? out.winLoss ?? 0));
+  const evalLoss = Math.max(0, Number(out.evalLoss || 0));
+  const topMoveGap = Math.max(0, Number(out.topMoveGap || 0));
+
+  const beforeCp = Number(out.beforeCpPlayer ?? out.beforeCp ?? 0);
+  const afterCp = Number(out.afterCpPlayer ?? out.afterCp ?? 0);
+
+  const improvement = afterCp - beforeCp;
+  const drop = beforeCp - afterCp;
+
+  const mateLike =
+    Math.abs(beforeCp) >= 9000 ||
+    Math.abs(afterCp) >= 9000;
+
+  const alreadyCompletelyLost =
+    beforeCp <= -900 &&
+    afterCp <= -900;
+
+  const alreadyCompletelyWinning =
+    beforeCp >= 1200 &&
+    afterCp >= 900;
+
+  const decidedPosition =
+    alreadyCompletelyLost ||
+    alreadyCompletelyWinning;
+
+  const safeWinningConversion =
+    beforeCp >= 450 &&
+    afterCp >= 300 &&
+    epLoss <= 0.08 &&
+    evalLoss <= 210;
+
+  const severeRank = {
+    inaccuracy: 1,
+    mistake: 2,
+    miss: 3,
+    blunder: 4,
+  };
+
+  function promoteTo(type) {
+    const currentRank = severeRank[out.type] || 0;
+    const targetRank = severeRank[type] || 0;
+
+    if (targetRank > currentRank) {
+      out.type = type;
+      out.severity = type;
+    }
+  }
+
+  // -----------------------------
+  // 1. Severe move sanity check
+  // -----------------------------
+  // Only promote bad labels if the position was not already completely decided.
+  // This prevents random endgame/forced-mate weirdness from creating fake blunders.
+  if (!mateLike && !decidedPosition && !safeWinningConversion) {
+    const positionFlipLoss =
+      (beforeCp >= 150 && afterCp <= -50) ||
+      (beforeCp >= 50 && afterCp <= -250) ||
+      (beforeCp >= -50 && afterCp <= -350);
+
+    const catastrophicLoss =
+      epLoss >= 0.245 ||
+      evalLoss >= 650 ||
+      (positionFlipLoss && epLoss >= 0.18) ||
+      (drop >= 500 && epLoss >= 0.16) ||
+      (beforeCp > -100 && afterCp < -650);
+
+    const majorLoss =
+      epLoss >= 0.17 ||
+      evalLoss >= 380 ||
+      (beforeCp >= 250 && afterCp <= -100) ||
+      drop >= 420;
+
+    const mediumLoss =
+      epLoss >= 0.12 ||
+      evalLoss >= 280 ||
+      drop >= 350;
+
+    const smallLoss =
+      epLoss >= 0.065 ||
+      evalLoss >= 150 ||
+      drop >= 200;
+
+    if (catastrophicLoss) {
+      promoteTo("blunder");
+    } else if (majorLoss) {
+      promoteTo("miss");
+    } else if (mediumLoss) {
+      promoteTo("mistake");
+    } else if (smallLoss) {
+      promoteTo("inaccuracy");
+    }
+  }
+
+  // -----------------------------
+  // 2. Fake great/brilliant cleanup
+  // -----------------------------
+  // Great/brilliant should need real context. A normal capture/check in a
+  // winning conversion should not become Great just because the engine likes it.
+  const greatPositionStillMeaningful =
+    !mateLike &&
+    beforeCp > -650 &&
+    beforeCp < 650;
+
+  const hasTacticalSignal =
+    out.savedPosition ||
+    out.sacrificesMaterial ||
+    topMoveGap >= 220 ||
+    improvement >= 220 ||
+    (out.givesCheck && (topMoveGap >= 160 || improvement >= 120)) ||
+    (out.isCapture && (topMoveGap >= 180 || improvement >= 140)) ||
+    Number(out.difficultyScore || 0) >= 0.75;
+
+  if (out.type === "great" && (!greatPositionStillMeaningful || !hasTacticalSignal)) {
+    if (epLoss <= 0.025 && evalLoss <= 35) {
+      out.type = "best";
+      out.severity = null;
+    } else {
+      out.type = "excellent";
+      out.severity = null;
+    }
+  }
+
+  if (out.type === "brilliant") {
+    const hasBrilliantSignal =
+      out.sacrificesMaterial ||
+      out.savedPosition ||
+      (greatPositionStillMeaningful && hasTacticalSignal && improvement >= 300);
+
+    if (!hasBrilliantSignal) {
+      out.type = "great";
+      out.severity = null;
+    }
+  }
+
+  // -----------------------------
+  // 3. Conservative Great promotion pass
+  // -----------------------------
+  // Keep this rare. The previous version promoted too many clean endgame
+  // conversions, especially captures/checks while already winning.
+  const canPromoteToGreat =
+    ["best", "excellent", "good"].includes(out.type) &&
+    !["inaccuracy", "mistake", "miss", "blunder"].includes(out.severity);
+
+  const cleanEnoughForGreat =
+    epLoss <= 0.025 &&
+    evalLoss <= 45;
+
+  const onlyMoveCleanEnough =
+    epLoss <= 0.045 &&
+    evalLoss <= 75;
+
+  const notRoutineConversion =
+    !(beforeCp >= 450 && afterCp >= 450 && !out.savedPosition && !out.sacrificesMaterial);
+
+  const savedOrSwungPosition =
+    out.savedPosition === true ||
+    (beforeCp <= -120 && improvement >= 180 && afterCp > -500) ||
+    (beforeCp < 250 && improvement >= 300);
+
+  const onlyMoveFind =
+    topMoveGap >= 260 &&
+    afterCp >= -100 &&
+    onlyMoveCleanEnough;
+
+  const forcingTacticFind =
+    (
+      out.sacrificesMaterial ||
+      out.savedPosition ||
+      (out.givesCheck && topMoveGap >= 220) ||
+      (out.isCapture && topMoveGap >= 240)
+    ) &&
+    improvement >= 120 &&
+    cleanEnoughForGreat;
+
+  const explicitLikelyGreat =
+    out.likelyGreatMove === true &&
+    onlyMoveCleanEnough &&
+    (
+      savedOrSwungPosition ||
+      onlyMoveFind ||
+      topMoveGap >= 240 ||
+      improvement >= 220
+    );
+
+  if (
+    canPromoteToGreat &&
+    greatPositionStillMeaningful &&
+    notRoutineConversion &&
+    (
+      savedOrSwungPosition ||
+      onlyMoveFind ||
+      forcingTacticFind ||
+      explicitLikelyGreat
+    )
+  ) {
+    out.type = "great";
+    out.severity = null;
+  }
+
+  return out;
 }
 
 function moveAccuracyFromWinLoss(q, baseRating = 1000) {
   if (!q) return 100;
-  if (q.type === "book") return null;
 
-  if (q.type === "brilliant") return 100;
-  if (q.type === "great") return 98;
-  if (q.type === "best") return 96;
-  if (q.type === "excellent") return 91;
+  const type = q.scoringType || q.type;
+  const severity = q.scoringSeverity || q.severity;
 
-  const wl = Math.max(0, Number(q.winLoss || 0));
+  if (type === "book") return null;
+
+  const epLoss = Math.max(0, Number(q.epLoss ?? q.winLoss ?? 0));
   const loss = Math.max(0, Number(q.evalLoss || 0));
 
-  // Win-probability penalty
-  const winLossAccuracy = 100 * Math.exp(-7.5 * wl);
+  const beforeCp = Number(q.beforeCpPlayer ?? q.beforeCp ?? 0);
+  const afterCp = Number(q.afterCpPlayer ?? q.afterCp ?? 0);
 
-  // Centipawn-loss penalty
-  const cpAccuracy = 100 * Math.exp(-loss / 260);
+  const isMateLike =
+    Math.abs(beforeCp) >= 9000 ||
+    Math.abs(afterCp) >= 9000;
 
-  // Use the harsher one so already-lost positions don't get over-rewarded.
-  let accuracy = Math.min(winLossAccuracy, cpAccuracy);
+  const isQuietCleanup =
+    isMateLike &&
+    epLoss <= 0.005 &&
+    loss <= 50 &&
+    ["best", "excellent", "good"].includes(type);
 
-  if (q.severity === "inaccuracy") accuracy *= 0.95;
-  if (q.severity === "mistake") accuracy *= 0.88;
-  if (q.severity === "miss") accuracy *= 0.82;
-  if (q.severity === "blunder") accuracy *= 0.65;
+  // Do not let forced-mate / completely decided cleanup moves inflate accuracy.
+  // These moves should still appear in move quality, but not heavily affect accuracy.
+  if (isQuietCleanup) return null;
+
+  // Sometimes mate scores flip between +10000 and -10000 when converting
+  // engine perspective to player perspective. If the classifier still says
+  // the move is clean, do not let that fake 10k/20k loss damage accuracy.
+  const isCleanType = ["brilliant", "great", "best", "excellent", "good"].includes(type);
+  if (isMateLike && isCleanType && !severity && loss >= 9000) {
+    if (["brilliant", "great", "best"].includes(type)) return 100;
+    return null;
+  }
+
+  if (type === "brilliant") return clamp(100 - epLoss * 20, 97, 100);
+  if (type === "great") return clamp(98 - epLoss * 25, 94, 99);
+  if (type === "best") return clamp(96 - epLoss * 18, 91, 98);
+  if (type === "excellent") return clamp(90 - epLoss * 36, 82, 94);
+  if (type === "good") return clamp(80 - epLoss * 50, 68, 87);
+
+  const epScore = 100 * Math.exp(-5.25 * epLoss);
+  const cpScore = 100 * Math.exp(-loss / 470);
+
+  let accuracy = epScore * 0.82 + cpScore * 0.18;
+
+  if (severity === "inaccuracy" || type === "inaccuracy") accuracy *= 0.965;
+  if (severity === "mistake" || type === "mistake") accuracy *= 0.90;
+  if (severity === "miss" || type === "miss") accuracy *= 0.86;
+  if (severity === "blunder" || type === "blunder") accuracy *= 0.70;
 
   return clamp(accuracy, 0, 100);
 }
 
-// Returns the accuracy level a player at `rating` is expected to achieve
-// under depth-12 Stockfish analysis. Higher-rated players are held to a
-// higher bar, so the same raw accuracy score means different things at
-// different ELO levels.
+
+function applyGameMessinessPenalty(rawAccuracy, playerMoves) {
+  const moves = (playerMoves || []).filter(q => {
+    const type = q?.scoringType || q?.type;
+    return q && type !== "book";
+  });
+
+  if (!moves.length) return rawAccuracy;
+
+  const seriousTypes = new Set(["inaccuracy", "mistake", "miss", "blunder"]);
+
+  const seriousMoves = moves.filter(q => {
+    const type = q.scoringType || q.type;
+    const severity = q.scoringSeverity || q.severity;
+    return seriousTypes.has(type) || seriousTypes.has(severity);
+  }).length;
+
+  const disasterMoves = moves.filter(q => {
+    const type = q.scoringType || q.type;
+    const severity = q.scoringSeverity || q.severity;
+    const key = severity || type;
+
+    return (
+      key === "miss" ||
+      key === "blunder" ||
+      Number(q.epLoss || 0) >= 0.20 ||
+      overviewLossForRating(q) >= 350
+    );
+  }).length;
+
+  const avgEpLoss =
+    moves.reduce((sum, q) => sum + Math.max(0, Number(q.epLoss || 0)), 0) /
+    moves.length;
+
+  const seriousRate = seriousMoves / moves.length;
+  const disasterRate = disasterMoves / moves.length;
+
+  let penalty = 0;
+
+  // Keep this soft. Accuracy is already penalized move-by-move, so this is
+  // only a small correction for very chaotic games, not a second full scoring pass.
+  penalty += Math.max(0, seriousRate - 0.22) * 8;
+  penalty += Math.max(0, disasterRate - 0.10) * 10;
+  penalty += Math.max(0, avgEpLoss - 0.095) * 14;
+
+  penalty = clamp(penalty, 0, 2.5);
+
+  return clamp(rawAccuracy - penalty, 0, 100);
+}
+
+
+function overviewLossForRating(q) {
+  if (!q) return 0;
+
+  const rawLoss = Math.max(0, Number(q.evalLoss || 0));
+  const beforeCp = Math.abs(Number(q.beforeCpPlayer ?? q.beforeCp ?? 0));
+  const afterCp = Math.abs(Number(q.afterCpPlayer ?? q.afterCp ?? 0));
+  const isMateSentinel = rawLoss >= 9000 || beforeCp >= 9000 || afterCp >= 9000;
+
+  const key = q.scoringSeverity || q.scoringType || q.severity || q.type;
+  const isCleanMove = ["book", "brilliant", "great", "best", "excellent", "good"].includes(key);
+
+  // Mate-score transitions can create fake 10k/20k centipawn losses.
+  // For clean moves, ignore them. For real errors, cap them so one mate
+  // transition does not crush the whole estimated rating.
+  if (isMateSentinel) {
+    return isCleanMove ? 0 : Math.min(rawLoss, 650);
+  }
+
+  return Math.min(rawLoss, 650);
+}
+
 function getExpectedAccuracy(rating) {
   const table = [
     [3400, 93],
@@ -2121,8 +3050,8 @@ function getExpectedAccuracy(rating) {
     [1800, 78],
     [1400, 72],
     [1200, 67],
-    [800,  59],
-    [400,  50],
+    [800, 59],
+    [400, 50],
   ];
 
   const r = clamp(Number(rating) || 1200, 400, 3400);
@@ -2130,6 +3059,7 @@ function getExpectedAccuracy(rating) {
   for (let i = 0; i < table.length - 1; i++) {
     const [r1, a1] = table[i];
     const [r2, a2] = table[i + 1];
+
     if (r >= r2) {
       const t = (r - r2) / (r1 - r2);
       return a2 + t * (a1 - a2);
@@ -2139,40 +3069,39 @@ function getExpectedAccuracy(rating) {
   return 50;
 }
 
-function getPerformanceProfile(rating) {
-  if (rating < 1200) {
-    return {
-      expectedOffset: 0,
-      sensitivity: 10,
-      maxGain: 90,
-      maxLoss: 180,
-      mistakeScale: 0.55,
-      winBonus: 70,
-      lossPenalty: 90,
-    };
+function ratingFromAccuracyCurve(accuracy) {
+  const table = [
+    [100, 2800],
+    [95, 2050],
+    [90, 1600],
+    [85, 1300],
+    [80, 1075],
+    [75, 925],
+    [70, 650],
+    [65, 400],
+    [60, 250],
+    [55, 175],
+    [50, 125],
+    [0, 100],
+  ];
+
+  const a = clamp(Number(accuracy) || 0, 0, 100);
+
+  for (let i = 0; i < table.length - 1; i++) {
+    const [a1, r1] = table[i];
+    const [a2, r2] = table[i + 1];
+
+    if (a >= a2) {
+      const t = (a - a2) / (a1 - a2);
+      return r2 + t * (r1 - r2);
+    }
   }
 
-  if (rating < 2200) {
-    return {
-      expectedOffset: 0,
-      sensitivity: 15,
-      maxGain: 180,
-      maxLoss: 240,
-      mistakeScale: 0.85,
-      winBonus: 90,
-      lossPenalty: 120,
-    };
-  }
+  return 100;
+}
 
-  return {
-    expectedOffset: 0,
-    sensitivity: 22,
-    maxGain: 260,
-    maxLoss: 420,
-    mistakeScale: 1.15,
-    winBonus: 110,
-    lossPenalty: 180,
-  };
+function roundEstimatedRating(value) {
+  return clamp(Math.round(value / 50) * 50, 100, 3800);
 }
 
 function estimatePerformanceRating(
@@ -2182,59 +3111,78 @@ function estimatePerformanceRating(
   result,
   avgLoss
 ) {
-  const rating = clamp(Number(baseRating) || 1200, 400, 3800);
-  const profile = getPerformanceProfile(rating);
+  const actualRating = clamp(Number(baseRating) || 800, 100, 3800);
+  const acc = clamp(Number(accuracy) || 0, 0, 100);
 
-  const expectedAcc = getExpectedAccuracy(rating) + profile.expectedOffset;
-  const accDelta = accuracy - expectedAcc;
+  const absolutePerf = ratingFromAccuracyCurve(acc);
+  const expectedAcc = getExpectedAccuracy(actualRating);
 
-  const accAdjustment = clamp(
-    accDelta * profile.sensitivity,
-    -profile.maxLoss,
-    profile.maxGain
-  );
+  const relativeSensitivity =
+    actualRating < 700 ? 10 :
+    actualRating < 1200 ? 25 :
+    actualRating < 2000 ? 22 :
+    20;
 
-  const mistakePenalty =
-    (
-      stats.Blunder * 90 +
-      stats.Mistake * 40 +
-      stats.Miss * 32 +
-      stats.Inaccuracy * 12
-    ) * profile.mistakeScale;
+  const relativePerf =
+    actualRating + (acc - expectedAcc) * relativeSensitivity;
 
-  const highlightBonus =
-    (
-      stats.Great * 12 +
-      stats.Brilliant * 35
-    ) * profile.mistakeScale;
+  // Low-rated messy games stay mostly accuracy-curve based.
+  // Cleaner/higher-rated games get more context from the player's actual rating.
+  let perf;
 
-  let resultBonus = 0;
-  if (result === "win") resultBonus = profile.winBonus;
-  if (result === "loss") resultBonus = -profile.lossPenalty;
+  if (actualRating < 700) {
+    perf = absolutePerf * 0.78 + relativePerf * 0.22;
+  } else if (actualRating < 1200) {
+    perf = absolutePerf * 0.45 + relativePerf * 0.55;
+  } else {
+    perf = absolutePerf * 0.55 + relativePerf * 0.45;
+  }
 
-  const avgLossPenalty = Math.min(
-    180,
-    Math.sqrt(Math.max(0, avgLoss)) * profile.mistakeScale * 5
-  );
+  const get = (name) => Number(stats?.[name] || 0);
 
-  const perf =
-    rating +
-    accAdjustment -
-    mistakePenalty -
-    avgLossPenalty +
-    highlightBonus +
-    resultBonus;
+  // Much smaller quality adjustment.
+  // Accuracy already contains most of the information.
+  const qualityAdjustment =
+    get("Brilliant") * 20 +
+    get("Great") * 10 +
+    get("Best") * 1 -
+    get("Inaccuracy") * 1 -
+    get("Mistake") * 3 -
+    get("Miss") * 5 -
+    get("Blunder") * 8;
 
-  return clamp(Math.round(perf), 100, 3800);
+  let resultAdjustment = 0;
+  if (result === "win") resultAdjustment = 0;
+  if (result === "loss") resultAdjustment = 0;
+
+  const avgLossPenalty =
+    Math.max(0, Number(avgLoss || 0) - 110) * 0.05;
+
+  perf += qualityAdjustment + resultAdjustment - avgLossPenalty;
+
+  // Low-rated game caps.
+  // This prevents 500 Elo games from randomly becoming 1200+ performances
+  // just because the accuracy was decent.
+  if (actualRating < 700) {
+    if (acc < 55) perf = Math.min(perf, 500);
+    else if (acc < 60) perf = Math.min(perf, 625);
+    else if (acc < 65) perf = Math.min(perf, 725);
+    else if (acc < 70) perf = Math.min(perf, 825);
+    else if (acc < 75) perf = Math.min(perf, 900);
+    else if (acc < 80) perf = Math.min(perf, 1000);
+    else if (acc < 85) perf = Math.min(perf, 1000);
+  }
+
+  return roundEstimatedRating(perf);
 }
 
 function computePlayerOverview(color) {
   const qualities = window.moveQualities || [];
   const meta = window.currentGameMeta || {};
   const result =
-  color === "white"
-    ? meta.whiteResult
-    : meta.blackResult;
+    color === "white"
+      ? meta.whiteResult
+      : meta.blackResult;
 
   const stats = {
     Brilliant: 0,
@@ -2253,9 +3201,18 @@ function computePlayerOverview(color) {
   let countedMoves = 0;
   let totalLoss = 0;
 
+  // NEW: keep only this player's move objects so the messy-game penalty
+  // can judge that player's game specifically.
+  const playerMoves = [];
+
   qualities.forEach((q, index) => {
     const moveColor = index % 2 === 0 ? "white" : "black";
     if (moveColor !== color) return;
+
+    playerMoves.push(q);
+
+    const scoringType = q.scoringType || q.type;
+    const scoringSeverity = q.scoringSeverity || q.severity;
 
     const name = qualityDisplayName(q.type, q.severity);
     if (stats[name] !== undefined) stats[name]++;
@@ -2268,41 +3225,48 @@ function computePlayerOverview(color) {
     if (moveAcc !== null) {
       let weight = 1;
 
-      if (q.type === "book") weight = 0.15;
+      if (scoringType === "book") weight = 0.15;
       else if (q.forced) weight = 0.35;
-      else if (q.type === "best") weight = 1.1;
-      else if (q.type === "brilliant") weight = 1.25;
+      else if (scoringType === "best") weight = 1.1;
+      else if (scoringType === "brilliant") weight = 1.25;
 
-      if (q.severity === "inaccuracy") weight = 1.2;
-      if (q.severity === "mistake") weight = 1.6;
-      if (q.severity === "miss") weight = 2.0;
-      if (q.severity === "blunder") weight = 3.0;
+      if (scoringSeverity === "inaccuracy") weight = 1.2;
+      if (scoringSeverity === "mistake") weight = 1.6;
+      if (scoringSeverity === "miss") weight = 2.0;
+      if (scoringSeverity === "blunder") weight = 3.0;
 
       totalAccuracy += moveAcc * weight;
       countedMoves += weight;
     }
 
-    totalLoss += Math.max(0, q.evalLoss || 0);
+    totalLoss += overviewLossForRating(q);
   });
 
-  const accuracy = countedMoves
+  const rawAccuracy = countedMoves
     ? totalAccuracy / countedMoves
     : 100;
+
+  // Display the direct expected-points accuracy. Use the messiness correction
+  // only for performance rating so the visible accuracy does not get double-punished.
+  const accuracy = clamp(rawAccuracy, 0, 100);
+  const ratingAccuracy = applyGameMessinessPenalty(rawAccuracy, playerMoves);
 
   const baseRating =
     color === "white" ? meta.whiteRating : meta.blackRating;
 
+  const avgLossForRating = totalLoss / Math.max(1, countedMoves);
+
   const estimatedRating = estimatePerformanceRating(
-    accuracy,
+    ratingAccuracy,
     baseRating,
     stats,
     result,
-    totalLoss / Math.max(1, countedMoves)
+    avgLossForRating
   );
 
   return {
     stats,
-    avgLoss: countedMoves ? totalLoss / countedMoves : 0,
+    avgLoss: countedMoves ? avgLossForRating : 0,
     accuracy,
     estimatedRating,
   };
@@ -2310,7 +3274,7 @@ function computePlayerOverview(color) {
 
 function evalToCp(ev) {
   if (!ev) return 0;
-  if (ev.type === "mate") return ev.value > 0 ? 1000 : -1000;
+  if (ev.type === "mate") return isMateForWhite(ev) ? 1000 : -1000;
   return Number(ev.value || 0);
 }
 
@@ -2608,6 +3572,8 @@ window.initAnalysisUI = async function(result) {
     return;
   }
 
+  normalizeTerminalMateEvals(result);
+
   // Wire tab clicks once
   if (!window.__tabsInitialized) {
     const tabOverview = document.getElementById("tabOverview");
@@ -2770,7 +3736,7 @@ function updateEvalBar() {
   let cp;
 
   if (ev.type === "mate") {
-    cp = ev.value > 0 ? 1000 : -1000;
+    cp = isMateForWhite(ev) ? 1000 : -1000;
   } else {
     cp = Number(ev.value || 0);
   }
@@ -2808,7 +3774,7 @@ function updateEvalBar() {
 
   if (label) {
     label.textContent =
-      ev.type === "mate" ? `M${ev.value}` : (cp / 100).toFixed(1);
+      ev.type === "mate" ? formatMateLabel(ev) : (cp / 100).toFixed(1);
   }
 }
 
@@ -2836,7 +3802,7 @@ function updateUI() {
   if (evalEl) {
     const ev = window.analysisResult?.evaluations?.[window.currentMoveIndex];
     if (ev) {
-      evalEl.innerHTML = `<strong>Eval:</strong> ${ev.type === "mate" ? "M" + ev.value : (ev.value / 100).toFixed(1)}`;
+      evalEl.innerHTML = `<strong>Eval:</strong> ${ev.type === "mate" ? formatMateLabel(ev) : (ev.value / 100).toFixed(1)}`;
     }
   }
 
