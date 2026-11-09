@@ -219,6 +219,10 @@ window.loadGameIntoAnalysis = async function loadGameIntoAnalysis(game, options 
 
   const formattedTimeControl = formatTimeControl(game.time_control);
 
+  // Remember whether we got here from the games list, so a "back" action can
+  // simply go back in history instead of rebuilding the browse view.
+  window.__openedFromBrowse = options.pushHistory !== false;
+
   window.selectedGamePGN = game.pgn;
   window.currentGameMeta = buildGameMeta(game, resultText, formattedTimeControl);
   window.currentGameId = window.currentGameMeta.gameId;
@@ -361,6 +365,16 @@ window.fetchArchiveGames = async function fetchArchiveGames(username, archive) {
 
       tbody.appendChild(tr);
     });
+
+    // On narrow screens the games panel is stacked under the archives, so
+    // bring it into view instead of leaving it below the fold.
+    if (
+      gamesPanel &&
+      window.matchMedia &&
+      window.matchMedia("(max-width: 1100px)").matches
+    ) {
+      gamesPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   } catch (error) {
     console.error("Error fetching archive games:", error);
   } finally {

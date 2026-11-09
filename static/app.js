@@ -108,6 +108,17 @@ function parsePathToState() {
 
   const parts = path.split("/").filter(Boolean);
 
+  // /hikaru/games
+  if (parts.length === 2 && parts[1] === "games") {
+    const username = decodeURIComponent(parts[0]);
+
+    return {
+      view: "browse",
+      username,
+      displayUsername: username,
+    };
+  }
+
   // /hikaru/analysis/123456789
   if (parts.length === 3 && parts[1] === "analysis") {
     const username = decodeURIComponent(parts[0]);
@@ -343,12 +354,18 @@ if (heroUsernameForm) {
   });
 }
 
-if (topbarTitle) {
-  topbarTitle.addEventListener("click", async function () {
-    history.pushState(buildLandingState(), "", "/");
-    await applyAppState(buildLandingState());
-  });
+// The logo (top bar, and the phone game-view header) is the home button
+async function goHome() {
+  history.pushState(buildLandingState(), "", "/");
+  await applyAppState(buildLandingState());
 }
+
+[
+  document.getElementById("topbarLeft") || topbarTitle,
+  document.getElementById("phoneLogoBtn"),
+].forEach(function (el) {
+  if (el) el.addEventListener("click", goHome);
+});
 
 window.addEventListener("popstate", function (event) {
   applyAppState(event.state || parsePathToState());

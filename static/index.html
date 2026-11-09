@@ -2,7 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#14161b" />
+    <meta name="color-scheme" content="dark" />
     <title>Chess Review Bot</title>
 
     <link rel="stylesheet" href="/vendor/chessboard-1.0.0.min.css" />
@@ -12,6 +17,14 @@
   <body>
     <!-- TOP BAR -->
     <div id="topbar">
+      <button id="analysisBackBtn" class="analysisBackBtn" type="button" aria-label="Back to games">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+          stroke-linejoin="round" aria-hidden="true">
+          <path d="M19 12H5M12 19l-7-7 7-7" />
+        </svg>
+        <span>Games</span>
+      </button>
       <div id="topbarLeft">
         <span class="topbarTitleIcon" aria-hidden="true">♔</span>
         <div id="topbarTitle">Chess Review Bot</div>
@@ -147,6 +160,45 @@
       <!-- ANALYSIS VIEW -->
       <div id="analysisLayout">
 
+        <!-- PHONES: back arrow + logo (home), like the Chess.com app -->
+        <div id="phoneHeader" class="phoneHeader">
+          <button
+            id="phoneBackBtn"
+            class="phoneBackBtn"
+            type="button"
+            aria-label="Back"
+          >
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+          </button>
+
+          <button
+            id="phoneLogoBtn"
+            class="phoneLogoBtn"
+            type="button"
+            aria-label="Chess Review Bot home"
+          >
+            <span class="phoneLogoIcon" aria-hidden="true">&#9812;</span>
+            <span>Chess Review Bot</span>
+          </button>
+
+          <span class="phoneHeaderSpacer" aria-hidden="true"></span>
+        </div>
+
+        <!-- PHONES: verdict bubble for the current move (hidden elsewhere) -->
+        <div id="coachBubble" class="coachBubble" aria-live="polite"></div>
+
         <!-- LEFT SIDE -->
         <div id="boardColumn">
 
@@ -221,8 +273,24 @@
           </div>
         </div>
 
+        <!-- PHONES: horizontal move strip (hidden elsewhere) -->
+        <div
+          id="moveRibbon"
+          class="moveRibbon"
+          role="toolbar"
+          aria-label="Moves"
+        ></div>
+
         <!-- RIGHT SIDE -->
         <div id="rightPanel">
+
+          <!-- PHONES: header of the summary card -->
+          <div id="sheetHeader" class="sheetHeader">
+            <button id="backToGamesBtn" class="backToGamesBtn" type="button">
+              &#8249; Games
+            </button>
+            <span class="sheetTitle">Game summary</span>
+          </div>
 
           <!-- TABS -->
           <div id="tabBar">
@@ -247,6 +315,9 @@
               Info
             </button>
           </div>
+
+          <!-- DESKTOP: move insight lives under the tabs, only on Moves -->
+          <div id="panelCoachBubble" class="panelCoachBubble" aria-live="polite"></div>
 
           <!-- TAB PANELS -->
           <div id="tabPanels">
@@ -281,30 +352,6 @@
                 </div>
               </div>
 
-              <!-- INSIGHTS -->
-              <div id="insightsContainer">
-
-                <h3 class="insightsHeader">
-                  Insights
-                </h3>
-
-                <div
-                  id="insightsContent"
-                  class="insights-content"
-                >
-
-                  <div class="emptyState compact">
-                    <div class="emptyStateTitle">
-                      Insights
-                    </div>
-
-                    <div class="emptyStateText">
-                      Analysis will appear here for each move.
-                    </div>
-                  </div>
-
-                </div>
-              </div>
             </div>
 
             <!-- INFO PANEL -->
@@ -330,7 +377,17 @@
 
           <!-- FOOTER -->
           <div id="rightPanelFooter">
+            <!-- Phones only: reopens the summary card -->
+            <button id="overviewBtn" class="overviewBtn" type="button">
+              Overview
+            </button>
+
             <div id="analysisControls"></div>
+
+            <!-- Phones only: closes the summary card and shows the board -->
+            <button id="viewGameBtn" class="viewGameBtn" type="button">
+              View game
+            </button>
           </div>
 
         </div>
@@ -361,8 +418,9 @@
     <script src="/vendor/jquery.min.js"></script>
     <script src="/vendor/chessboard-1.0.0.js"></script>
     <script src="/vendor/chess.js"></script>
+    <script src="/tactics.js?v=20261104-consistency-v1"></script>
 
-    <script src="/ui.js"></script>
+    <script src="/ui.js?v=20261104-consistency-v1"></script>
     <script src="/api.js"></script>
     <script src="/app.js"></script>
   </body>
