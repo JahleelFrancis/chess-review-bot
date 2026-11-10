@@ -11,3 +11,11 @@
 *.jpeg binary
 *.gif binary
 *.webp binary
+
+# Stockfish is an external chess engine, not application-authored C++.
+# Exclude its source and build scripts from GitHub's language percentages.
+stockfish/** linguist-vendored
+
+# Browser libraries shipped with the app are third-party dependencies.
+static/vendor/** linguist-vendored
+
