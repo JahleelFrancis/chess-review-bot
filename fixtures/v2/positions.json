@@ -1,0 +1,336 @@
+{
+  "schema_version": "2.0.0",
+  "policy": {
+    "verified": "rules_verified",
+    "candidate": "unverified",
+    "no_silent_success_for_unverified": true
+  },
+  "fixtures": [
+    {
+      "id": "TAC-RELATIVE-PIN-001",
+      "title": "Relative pin geometry with no immediate recapture",
+      "provenance": {
+        "source": "curated_position",
+        "game": null
+      },
+      "evidence_status": "rules_verified",
+      "position": {
+        "fen": "4k2r/8/1q6/8/3n4/8/5B2/6K1 w - - 0 1",
+        "history_uci": [],
+        "played_uci": "f2e3",
+        "expected_san": "Be3",
+        "expected_after_fen": "4k2r/8/1q6/8/3n4/4B3/8/6K1 b - - 1 1"
+      },
+      "oracle": {
+        "opponent_can_capture_mover": false,
+        "ray": {
+          "from": "e3",
+          "blocker": "d4",
+          "behind": "b6",
+          "blocker_type": "n",
+          "behind_type": "q"
+        }
+      },
+      "frontend": {
+        "required_text": [
+          "pins the knight on d4 to the queen on b6"
+        ],
+        "forbidden_text": [
+          "forced win",
+          "guaranteed win"
+        ],
+        "required_arrows": [
+          {
+            "from": "e3",
+            "to": "b6"
+          }
+        ],
+        "forbidden_arrows": []
+      }
+    },
+    {
+      "id": "TAC-FALSE-PIN-001",
+      "title": "Immediately capturable bishop must not be presented as an effective pin",
+      "provenance": {
+        "source": "curated_position",
+        "game": null
+      },
+      "evidence_status": "rules_verified",
+      "position": {
+        "fen": "4k2r/8/1q6/8/3n1p2/8/5B2/6K1 w - - 0 1",
+        "history_uci": [],
+        "played_uci": "f2e3",
+        "expected_san": "Be3",
+        "expected_after_fen": "4k2r/8/1q6/8/3n1p2/4B3/8/6K1 b - - 1 1"
+      },
+      "oracle": {
+        "opponent_can_capture_mover": true,
+        "ray": {
+          "from": "e3",
+          "blocker": "d4",
+          "behind": "b6",
+          "blocker_type": "n",
+          "behind_type": "q"
+        }
+      },
+      "frontend": {
+        "required_text": [],
+        "forbidden_text": [
+          "pins the knight",
+          "forced win",
+          "wins the queen"
+        ],
+        "required_arrows": [],
+        "forbidden_arrows": [
+          {
+            "from": "e3",
+            "to": "b6"
+          }
+        ]
+      }
+    },
+    {
+      "id": "TAC-DISCOVERED-001",
+      "title": "Moving knight exposes rook attack on queen",
+      "provenance": {
+        "source": "curated_position",
+        "game": null
+      },
+      "evidence_status": "rules_verified",
+      "position": {
+        "fen": "6k1/4q3/8/8/8/8/4N3/4R1K1 w - - 0 1",
+        "history_uci": [],
+        "played_uci": "e2g3",
+        "expected_san": "Ng3",
+        "expected_after_fen": "6k1/4q3/8/8/8/6N1/8/4R1K1 b - - 1 1"
+      },
+      "oracle": {
+        "opponent_can_capture_mover": false,
+        "uncovered_attack": {
+          "from": "e1",
+          "to": "e7",
+          "before": false,
+          "after": true
+        }
+      },
+      "frontend": {
+        "required_text": [
+          "discovered attack"
+        ],
+        "forbidden_text": [
+          "fork",
+          "guaranteed win"
+        ],
+        "required_arrows": [
+          {
+            "from": "e1",
+            "to": "e7"
+          }
+        ],
+        "forbidden_arrows": []
+      }
+    },
+    {
+      "id": "TAC-CHECK-FORK-001",
+      "title": "Bishop check simultaneously attacks king and rook; forced value still a separate claim",
+      "provenance": {
+        "source": "curated_position",
+        "game": null
+      },
+      "evidence_status": "rules_verified",
+      "position": {
+        "fen": "r2qr1k1/ppp2pb1/6p1/8/6N1/2P1PQ1P/P4PP1/R3K2R b KQ - 0 16",
+        "history_uci": [],
+        "played_uci": "g7c3",
+        "expected_san": "Bxc3+",
+        "expected_after_fen": "r2qr1k1/ppp2p2/6p1/8/6N1/2b1PQ1P/P4PP1/R3K2R w KQ - 0 17"
+      },
+      "oracle": {
+        "opponent_can_capture_mover": false,
+        "checking_move": true,
+        "attacks_after": [
+          {
+            "from": "c3",
+            "to": "e1"
+          },
+          {
+            "from": "c3",
+            "to": "a1"
+          }
+        ]
+      },
+      "frontend": {
+        "required_text": [
+          "rook on a1",
+          "king on e1"
+        ],
+        "forbidden_text": [
+          "checkmate is forced"
+        ],
+        "required_arrows": [
+          {
+            "from": "c3",
+            "to": "e1"
+          },
+          {
+            "from": "c3",
+            "to": "a1"
+          }
+        ],
+        "forbidden_arrows": []
+      }
+    },
+    {
+      "id": "TAC-PAWN-TRADE-001",
+      "title": "A capturable pawn is not automatically a free material gain",
+      "provenance": {
+        "source": "curated_position",
+        "game": null
+      },
+      "evidence_status": "rules_verified",
+      "position": {
+        "fen": "rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+        "history_uci": [],
+        "played_uci": "e4d5",
+        "expected_san": "exd5",
+        "expected_after_fen": "rnbqkbnr/ppp1pppp/8/3P4/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2"
+      },
+      "oracle": {
+        "opponent_can_capture_mover": true,
+        "legal_opponent_recapture": "d8d5"
+      },
+      "frontend": {
+        "required_text": [
+          "exchange"
+        ],
+        "forbidden_text": [
+          "free pawn",
+          "forced win"
+        ],
+        "required_arrows": [],
+        "forbidden_arrows": []
+      }
+    },
+    {
+      "id": "RULE-THREEFOLD-001",
+      "title": "Threefold claim depends on complete game history",
+      "provenance": {
+        "source": "curated_sequence",
+        "game": null
+      },
+      "evidence_status": "rules_verified",
+      "position": {
+        "start_fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "history_uci": [
+          "g1f3",
+          "g8f6",
+          "f3g1",
+          "f6g8",
+          "g1f3",
+          "g8f6",
+          "f3g1",
+          "f6g8"
+        ]
+      },
+      "oracle": {
+        "can_claim_threefold_repetition": true
+      },
+      "frontend": null
+    },
+    {
+      "id": "RULE-NOT-YET-THREEFOLD-001",
+      "title": "Same board and side to move does not imply a claimable threefold",
+      "provenance": {
+        "source": "curated_sequence",
+        "game": null
+      },
+      "evidence_status": "rules_verified",
+      "position": {
+        "start_fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "history_uci": [
+          "g1f3",
+          "g8f6",
+          "f3g1",
+          "f6g8"
+        ]
+      },
+      "oracle": {
+        "can_claim_threefold_repetition": false
+      },
+      "frontend": null
+    },
+    {
+      "id": "BRILL-IQSNIPPY-001",
+      "title": "14...Nxc3 knight sacrifice, candidate Brilliant; soundness unknown",
+      "provenance": {
+        "source": "historical_user_game",
+        "game": "IQSNIPPY"
+      },
+      "evidence_status": "unverified",
+      "blocked_on": [
+        "complete PGN or pre-move FEN",
+        "14...Nxc3 legal UCI in full move history",
+        "pinned engine snapshots and credible defensive replies",
+        "classification acceptance policy and reviewer"
+      ],
+      "position": null,
+      "oracle": null,
+      "frontend": null,
+      "reference": {
+        "chesscom_label": "brilliant",
+        "our_label": "not brilliant",
+        "source_confidence": "reported_not_per_ply_export"
+      }
+    },
+    {
+      "id": "CLASS-REPEATED-NF5-001",
+      "title": "Repeated Nf5+ classification drift",
+      "provenance": {
+        "source": "historical_user_game",
+        "game": "IQSNIPPY"
+      },
+      "evidence_status": "unverified",
+      "blocked_on": [
+        "full history on each occurrence",
+        "fixed eval snapshots per occurrence",
+        "draw claim rights"
+      ],
+      "position": null,
+      "oracle": null,
+      "frontend": null
+    },
+    {
+      "id": "UI-EXPLAIN-STATE-001",
+      "title": "Real-browser Explain / Got it and mobile geometry",
+      "provenance": {
+        "source": "historical_bug",
+        "game": null
+      },
+      "evidence_status": "unverified",
+      "blocked_on": [
+        "seeded full-game browser route",
+        "Playwright trace/screenshots at target viewports",
+        "run actual browser not synthetic DOM"
+      ],
+      "position": null,
+      "oracle": null,
+      "frontend": null
+    },
+    {
+      "id": "CLAIM-FORCED-MATERIAL-001",
+      "title": "Check whether every legal defense preserves the asserted minimum material gain",
+      "provenance": {
+        "source": "historical_bug",
+        "game": null
+      },
+      "evidence_status": "unverified",
+      "blocked_on": [
+        "bounded exhaustive tactical proof or adjudicated defensive analysis",
+        "explicit alternatives and actual material balances"
+      ],
+      "position": null,
+      "oracle": null,
+      "frontend": null
+    }
+  ]
+}

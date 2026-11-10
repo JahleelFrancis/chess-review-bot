@@ -1,0 +1,30 @@
+{
+  "notes": "Manual transcription of screenshots supplied in the conversation. Screenshot counts are observational targets, NOT verified per-move ground truth or a specification of Chess.com's private classifier. Some reviewed games were reanalyzed at different times.",
+  "games": [
+    {
+      "id": "freyz10-vs-hipporex123",
+      "white": {"username":"Freyz10","accuracy":70.3,"gameRating":700,"counts":{"brilliant":0,"great":0,"book":2,"best":13,"excellent":18,"good":12,"inaccuracy":6,"mistake":4,"miss":1,"blunder":2}},
+      "black": {"username":"HippoRex123","accuracy":75.3,"gameRating":1000,"counts":{"brilliant":0,"great":3,"book":2,"best":12,"excellent":28,"good":6,"inaccuracy":2,"mistake":1,"miss":3,"blunder":1}}
+    },
+    {
+      "id": "fadill1220-vs-hipporex123",
+      "white": {"username":"Fadill1220","accuracy":70.3,"gameRating":1050,"counts":{"brilliant":0,"great":0,"book":4,"best":5,"excellent":5,"good":8,"inaccuracy":3,"mistake":2,"miss":2,"blunder":1}},
+      "black": {"username":"HippoRex123","accuracy":80.3,"gameRating":1450,"counts":{"brilliant":0,"great":5,"book":4,"best":9,"excellent":2,"good":5,"inaccuracy":3,"mistake":0,"miss":1,"blunder":1}}
+    },
+    {
+      "id": "harrisonthewonderful-vs-hipporex123",
+      "white": {"username":"HarrisonTheWonderful","accuracy":64.6,"gameRating":600,"counts":{"brilliant":0,"great":1,"book":4,"best":8,"excellent":7,"good":2,"inaccuracy":3,"mistake":3,"miss":3,"blunder":0}},
+      "black": {"username":"HippoRex123","accuracy":71.2,"gameRating":1050,"counts":{"brilliant":0,"great":2,"book":4,"best":8,"excellent":7,"good":3,"inaccuracy":3,"mistake":2,"miss":2,"blunder":0}}
+    },
+    {
+      "id": "auakiev-vs-fritzisbadatchess1",
+      "white": {"username":"auakiev","accuracy":80.4,"gameRating":1600,"counts":{"brilliant":0,"great":0,"book":3,"best":7,"excellent":8,"good":3,"inaccuracy":3,"mistake":6,"miss":0,"blunder":0}},
+      "black": {"username":"Fritzisbadatchess1","accuracy":90.2,"gameRating":2250,"counts":{"brilliant":0,"great":0,"book":3,"best":13,"excellent":7,"good":3,"inaccuracy":2,"mistake":1,"miss":0,"blunder":0}}
+    },
+    {
+      "id": "ocampeon-vs-fritzisbadatchess1",
+      "white": {"username":"ocampeon","accuracy":76.1,"gameRating":1700,"counts":{"brilliant":0,"great":0,"book":2,"best":6,"excellent":11,"good":5,"inaccuracy":1,"mistake":4,"miss":0,"blunder":0}},
+      "black": {"username":"Fritzisbadatchess1","accuracy":93.1,"gameRating":2200,"counts":{"brilliant":1,"great":1,"book":2,"best":16,"excellent":9,"good":3,"inaccuracy":0,"mistake":0,"miss":0,"blunder":0}}
+    }
+  ]
+}

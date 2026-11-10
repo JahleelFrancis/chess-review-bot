@@ -1,0 +1,3 @@
+# Tested against the chess 1.11.2 library included in the user project environment.
+# Chess.com parity and Stockfish soundness require separate engine-backed review.
+python-chess==1.999

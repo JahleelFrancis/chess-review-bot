@@ -2934,3 +2934,23 @@ body.view-analysis #analysisControls.explainControls button.explainGotIt:nth-chi
     line-height: 1.15;
   }
 }
+
+/* Restore internal scrolling for desktop Overview and Info.
+   Keep the Moves panel expandable for long explanations. */
+
+@media (min-width: 1181px),
+       (min-width: 1000px) and (min-height: 600px) {
+
+    body.view-analysis[data-tab="overview"] #rightPanel,
+    body.view-analysis[data-tab="info"] #rightPanel {
+        height: var(--review-stage-height);
+        min-height: var(--review-stage-height);
+    }
+
+    body.view-analysis[data-tab="overview"] #overviewContent,
+    body.view-analysis[data-tab="info"] #analysis {
+        height: 100%;
+        min-height: 0;
+        overflow-y: auto;
+    }
+}

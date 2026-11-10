@@ -1,0 +1,26 @@
+name: Chess Review Bot Regression Harness
+on:
+  push:
+    paths:
+      - 'static/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'fixtures/**'
+      - '.github/workflows/chess-review-harness.yml'
+  pull_request:
+    paths:
+      - 'static/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'fixtures/**'
+      - '.github/workflows/chess-review-harness.yml'
+jobs:
+  deterministic-regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Chess review determinism, tactics and UI invariants
+        run: node scripts/run-harness.cjs

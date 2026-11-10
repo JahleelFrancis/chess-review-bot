@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en"><meta charset="UTF-8"><title>Chess browser build smoke</title>
+<h1>chess.js 1.4.0 classic-browser verification</h1>
+<pre id="result">Pending</pre>
+<script>
+  window.browserBuildErrors = [];
+  window.addEventListener('error', function(e) {
+    window.browserBuildErrors.push(e.message);
+  });
+</script>
+<script src="../../static/vendor/chess.browser.js"></script>
+<script>
+  (function () {
+    var failures = [];
+    function ok(condition, text) { if (!condition) failures.push(text); }
+    try {
+      ok(window.browserBuildErrors.length === 0, 'Script errors: ' + window.browserBuildErrors.join('; '));
+      ok(typeof window.Chess === 'function', 'window.Chess missing');
+      ok(typeof window.ChessJS === 'object', 'window.ChessJS missing');
+      ok(window.Chess === window.ChessJS.Chess, 'Chess global does not match named export');
+      var c = new Chess();
+      ok(c.fen() === 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', 'initial FEN');
+      ok(c.moves().length === 20, 'opening legal moves');
+      ok(c.move('e4').san === 'e4', 'e4 SAN');
+      ok(c.move('e5').san === 'e5', 'e5 SAN');
+      ok(c.move('Nf3').san === 'Nf3', 'Nf3 SAN');
+      ok(c.undo().san === 'Nf3', 'undo');
+      var p = new Chess('4k3/P7/8/8/8/8/8/4K3 w - - 0 1');
+      p.move({ from: 'a7', to: 'a8', promotion: 'q' });
+      ok(p.get('a8').type === 'q', 'promotion');
+      var pgn = new Chess();
+      pgn.loadPgn('1. f3 e5 2. g4 Qh4#');
+      ok(pgn.isCheckmate(), 'PGN/checkmate');
+    } catch (e) { failures.push('Exception: ' + e.stack); }
+    var el = document.getElementById('result');
+    el.textContent = failures.length ? 'FAIL: ' + failures.join(' | ') : 'PASS: real browser loaded chess.js, no script errors, API behavior validated';
+    document.body.setAttribute('data-test-result', failures.length ? 'FAIL' : 'PASS');
+  })();
+</script></html>
