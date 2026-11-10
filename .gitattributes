@@ -11,3 +11,8 @@
 *.jpeg binary
 *.gif binary
 *.webp binary
+
+# Exclude third-party engine and browser vendor source from GitHub language statistics.
+# These directives do not delete files or affect their execution.
+stockfish/** linguist-vendored
+static/vendor/** linguist-vendored
