@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "notes": "Synthetic structurally-valid data for validator demo; not a real Stockfish/Chess.com result.",
+  "analysisResult": {
+    "moves": [
+      "e4",
+      "e5",
+      "Nf3",
+      "Nc6",
+      "Bb5",
+      "a6"
+    ],
+    "uci_moves": [
+      "e2e4",
+      "e7e5",
+      "g1f3",
+      "b8c6",
+      "f1b5",
+      "a7a6"
+    ],
+    "fens": [
+      "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+      "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+      "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2",
+      "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3",
+      "r1bqkbnr/pppp1ppp/2n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3",
+      "r1bqkbnr/1ppp1ppp/p1n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 4"
+    ],
+    "evaluations": [
+      {
+        "type": "cp",
+        "value": 10,
+        "lines": []
+      },
+      {
+        "type": "cp",
+        "value": 20,
+        "lines": []
+      },
+      {
+        "type": "cp",
+        "value": 10,
+        "lines": []
+      },
+      {
+        "type": "cp",
+        "value": 20,
+        "lines": []
+      },
+      {
+        "type": "cp",
+        "value": 10,
+        "lines": []
+      },
+      {
+        "type": "cp",
+        "value": 20,
+        "lines": []
+      },
+      {
+        "type": "cp",
+        "value": 10,
+        "lines": []
+      }
+    ]
+  },
+  "moveQualities": [
+    {
+      "type": "book",
+      "uci": "e2e4",
+      "evalLoss": 0,
+      "epLoss": 0
+    },
+    {
+      "type": "book",
+      "uci": "e7e5",
+      "evalLoss": 0,
+      "epLoss": 0
+    },
+    {
+      "type": "best",
+      "uci": "g1f3",
+      "evalLoss": 0,
+      "epLoss": 0
+    },
+    {
+      "type": "best",
+      "uci": "b8c6",
+      "evalLoss": 0,
+      "epLoss": 0
+    },
+    {
+      "type": "best",
+      "uci": "f1b5",
+      "evalLoss": 0,
+      "epLoss": 0
+    },
+    {
+      "type": "best",
+      "uci": "a7a6",
+      "evalLoss": 0,
+      "epLoss": 0
+    }
+  ]
+}
