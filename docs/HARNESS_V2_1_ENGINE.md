@@ -64,7 +64,7 @@ When the **actual full game PGN** is available locally, run:
 python scripts/v2/engine_probe.py --nodes 100000 --iqsnippy-pgn "C:\\path\\to\\iqsnippy-game.pgn" --out artifacts/v2-engine/iqsnippy.json
 ```
 
-The script parses the complete game, looks for **exactly one black move 14...Nxc3**, preserves the full position history, and searches both Stockfish's best move and the played move specifically, plus its best defense. It **rejects** a missing or unmatched PGN; it never fabricates a FEN. This establishes an engine observation, **not** a Brilliant verdict. A deeper defensive search and separately reviewed classification policy are still required.
+The script requires a **complete standard-start PGN** with IQSNIPPY named as White or Black, reconstructs all **27 preceding half-moves**, looks for **exactly one black move 14...Nxc3**, and searches both Stockfish's best move and the played move specifically, plus its best defense. The evidence JSON records all prior UCI moves and the supplied PGN's SHA-256. It **rejects** a missing or unmatched PGN; it never fabricates a FEN. This establishes an engine observation, **not** a Brilliant verdict. A deeper defensive search and separately reviewed classification policy are still required.
 
 Do not commit personal PGNs or engine output to Git until you have reviewed their contents, game provenance and public-sharing implications.
 
