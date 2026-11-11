@@ -128,3 +128,17 @@ stockfish/              Third-party engine distribution (not app-authored C++)
 ## Attribution
 
 This app uses third-party chess software, including **Stockfish**, **chess.js**, and **chessboard.js**, under their respective licenses. See the repository's third-party license notices and the upstream projects. Stockfish engine source code in this repository is **not authored by this project's maintainer**.
+
+## Harness v2.1 — live Stockfish evidence
+
+The original fast suite now also runs **seven fail-closed engine-adapter contract tests** (with synthetic engine responses). These are **not** the same as running the real engine.
+
+Run the opt-in real-engine lane on a machine with Stockfish installed:
+
+```powershell
+python scripts/v2/engine_probe.py --nodes 25000
+```
+
+It checks engine-selected and restricted-root continuations for curated, legally verified positions; logs the Stockfish binary hash, evaluations from White's perspective, and fully validated PVs in ignored `artifacts/v2-engine/` files. The historical IQSNIPPY `14...Nxc3` case is **still unverified**; supplying the original full PGN through `--iqsnippy-pgn` permits evidence gathering but does not automatically label it Brilliant.
+
+See [Harness v2.1 engine verification](docs/HARNESS_V2_1_ENGINE.md) for prerequisites, commands, guarantees, and limitations.
