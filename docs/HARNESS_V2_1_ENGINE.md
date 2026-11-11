@@ -41,7 +41,7 @@ python scripts/v2/engine_probe.py --nodes 25000
 A custom engine path:
 
 ```powershell
-python scripts/v2/engine_probe.py --engine "C:\\Tools\\Stockfish\\stockfish.exe" --nodes 25000
+python scripts/v2/engine_probe.py --engine "C:\Tools\Stockfish\stockfish.exe" --nodes 25000
 ```
 
 Results are written to **`artifacts/v2-engine/latest.json`**, which is ignored by Git. The JSON records the engine name, binary SHA-256, single-thread/16 MiB hash profile, NNUE option names, search nodes/depth, evaluation **from White's perspective**, full legal UCI/SAN PV, and input-fixture SHA-256 hashes.
@@ -61,7 +61,7 @@ The exact game PGN/FEN has **not** been recovered. This case remains `UNVERIFIED
 When the **actual full game PGN** is available locally, run:
 
 ```powershell
-python scripts/v2/engine_probe.py --nodes 100000 --iqsnippy-pgn "C:\\path\\to\\iqsnippy-game.pgn" --out artifacts/v2-engine/iqsnippy.json
+python scripts/v2/engine_probe.py --nodes 100000 --iqsnippy-pgn "C:\path\to\iqsnippy-game.pgn" --out artifacts/v2-engine/iqsnippy.json
 ```
 
 The script requires a **complete standard-start PGN** with IQSNIPPY named as White or Black, reconstructs all **27 preceding half-moves**, looks for **exactly one black move 14...Nxc3**, and searches both Stockfish's best move and the played move specifically, plus its best defense. The evidence JSON records all prior UCI moves and the supplied PGN's SHA-256. It **rejects** a missing or unmatched PGN; it never fabricates a FEN. This establishes an engine observation, **not** a Brilliant verdict. A deeper defensive search and separately reviewed classification policy are still required.
