@@ -98,6 +98,11 @@ def load_iqsnippy(pgn_file: Path) -> dict:
     with pgn_file.open("r", encoding="utf-8-sig") as stream:
         game = chess.pgn.read_game(stream)
     require(game is not None and not game.errors, "PGN missing or contains parsing errors")
+    require(game.board().fen() == chess.STARTING_FEN,
+            "Historical case requires a complete PGN starting from the normal initial position")
+    players = [game.headers.get("White", ""), game.headers.get("Black", "")]
+    require(any(p.casefold() == "iqsnippy" for p in players),
+            "PGN must identify IQSNIPPY in the White or Black header")
     board = game.board()
     matches = []
     for move in game.mainline_moves():
@@ -107,6 +112,7 @@ def load_iqsnippy(pgn_file: Path) -> dict:
         board.push(move)
     require(len(matches) == 1, f"Expected exactly one legal 14...Nxc3, got {len(matches)}")
     before, played = matches[0]
+    require(len(before.move_stack) == 27, "14...Nxc3 requires all 27 preceding half-moves")
     return {"id": "BRILL-IQSNIPPY-001", "source": "local_pgn_14...Nxc3",
             "board": before, "played": played, "defense": None, "case_type": "historical_unverified"}
 
@@ -159,7 +165,9 @@ def run_case(engine, row: dict, nodes: int) -> dict:
     after.push(move)
     result = {"id": row["id"], "source": row["source"],
               "evidence_status": "ENGINE_OBSERVATION_NOT_CLASSIFICATION_TRUTH",
-              "before_fen": before_fen, "played_uci": move.uci(),
+              "before_fen": before_fen,
+              "history_uci": [m.uci() for m in board.move_stack],
+              "played_uci": move.uci(),
               "played_san": played_san, "after_fen": after.fen(),
               "best_from_before": best, "played_forced_from_before": played,
               "best_defense_after_played": analyze(engine, after, nodes)}
@@ -211,6 +219,7 @@ def main() -> int:
                   "not_verified": ["Brilliant classification", "forced tactical gain", "Chess.com label parity",
                                    "IQSNIPPY sacrifice soundness without independent reviewer"],
                   "rules_registry_sha256": sha256(REGISTRY), "engine_cases_sha256": sha256(CASES),
+                  "source_pgn_sha256": sha256(args.iqsnippy_pgn) if args.iqsnippy_pgn else None,
                   "profile": profile, "cases": results}
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
