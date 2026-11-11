@@ -61,14 +61,19 @@ class EngineEvidenceContract(unittest.TestCase):
 
     def test_pgn_extraction_requires_exact_fullmove_and_san(self):
         # Synthetic parser test only. This is NOT the missing historical game.
-        pgn = ('[SetUp "1"]\n'
-               '[FEN "4k3/8/8/1n6/8/2B5/8/4K3 b - - 0 14"]\n'
-               '[Result "*"]\n\n14... Nxc3 *\n')
+        pgn = ('[Event "Synthetic parser test"]\n'
+               '[White "TestPlayer"]\n'
+               '[Black "IQSNIPPY"]\n'
+               '[Result "*"]\n\n'
+               '1. d4 Nf6 2. Nc3 e6 3. e4 Nd5 4. h3 a6 5. a3 b6 6. b3 c6 '
+               '7. g3 Be7 8. Bg2 O-O 9. Nge2 d6 10. O-O Nd7 11. f3 Bb7 '
+               '12. Kh2 Qc7 13. Rb1 Rae8 14. Qd3 Nxc3 *\n')
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "synthetic.pgn"
             path.write_text(pgn, encoding="utf-8")
             candidate = engine_probe.load_iqsnippy(path)
-        self.assertEqual(candidate["played"].uci(), "b5c3")
+        self.assertEqual(candidate["played"].uci(), "d5c3")
+        self.assertEqual(len(candidate["board"].move_stack), 27)
         self.assertEqual(candidate["board"].fullmove_number, 14)
         self.assertEqual(candidate["board"].turn, chess.BLACK)
         self.assertEqual(candidate["case_type"], "historical_unverified")
