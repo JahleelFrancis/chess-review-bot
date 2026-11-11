@@ -24,3 +24,4 @@ yarn-error.log*
 
 # Verification and browser-generated artifacts
 harness-screenshots/
+artifacts/v2-engine/

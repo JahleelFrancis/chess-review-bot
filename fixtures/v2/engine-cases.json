@@ -1,0 +1,20 @@
+{
+  "schema_version": "2.1.0",
+  "policy": "These are rule-verified positions for engine observations, not calibrated move-quality labels or tactical proofs.",
+  "cases": [
+    {
+      "id": "ENGINE-PAWN-RECAPTURE-001",
+      "rule_fixture_id": "TAC-PAWN-TRADE-001",
+      "defense_uci": "d8d5",
+      "defense_type": "immediate_recapture",
+      "purpose": "Compare exd5 against engine preferred choice and search the legal queen recapture, without asserting a free pawn."
+    },
+    {
+      "id": "ENGINE-FALSE-PIN-001",
+      "rule_fixture_id": "TAC-FALSE-PIN-001",
+      "defense_uci": "f4e3",
+      "defense_type": "immediate_recapture",
+      "purpose": "Compare Be3 against engine preferred choice and search the immediate pawn recapture, without asserting the bishop pins a queen for free."
+    }
+  ]
+}
